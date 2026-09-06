@@ -1,0 +1,2158 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
+  <title>HeatShield Pro — Operational Biometeorology &amp; Heat Risk Platform</title>
+  <meta name="description" content="Operational biometeorological intelligence platform. Multi-node human thermal stress forecasting, epidemiological surge modeling, hyper-local GIS mapping, and automated municipal heat action directives.">
+  
+  <!-- Premium Scientific Display & Tabular Fonts -->
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=Outfit:wght@400;500;600;700&family=Public+Sans:wght@400;500;600;700&family=JetBrains+Mono:wght@400;500;600;700&display=swap" rel="stylesheet">
+  
+  <!-- PWA Manifest, Icons & Mobile Web App Metas -->
+  <link rel="manifest" href="/manifest.json">
+  <meta name="theme-color" content="#060911">
+  <meta name="apple-mobile-web-app-capable" content="yes">
+  <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
+  <meta name="apple-mobile-web-app-title" content="HeatShield Pro">
+  <link rel="apple-touch-icon" href="/static/icons/icon-192.png">
+  <link rel="icon" type="image/png" sizes="192x192" href="/static/icons/icon-192.png">
+  <link rel="icon" type="image/svg+xml" href="/static/icons/icon.svg">
+
+  <!-- Leaflet CSS -->
+  <link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css" integrity="sha256-p4NxAoJBhIIN+hmNHrzRCf9tD/miZyoHS5obTRR9BMY=" crossorigin="" />
+
+  <!-- Local Stylesheet -->
+  <link rel="stylesheet" href="/static/style.css">
+</head>
+<body id="app-body">
+
+  <div class="app-shell" id="app-shell">
+
+    <!-- Main Workspace Frame -->
+    <div class="app-main-area" id="app-main-area">
+
+      <!-- Top System Status Header -->
+      <div class="system-status-bar">
+        <div class="system-status-container">
+          <div class="system-status-left">
+            <div class="status-indicator">
+              <span class="pulse-dot"></span>
+              <span class="status-label">Operational</span>
+            </div>
+            <div class="system-divider"></div>
+            <span class="system-framework-tag">WMO / IMD Biometeorological Framework</span>
+          </div>
+
+          <div class="system-status-right">
+            <span class="system-clock-label">System Time:</span>
+            <span id="utc-clock" class="tabular-num">UTC --:--:--</span>
+          </div>
+        </div>
+      </div>
+
+      <!-- Main Institutional Navigation Header -->
+      <header class="app-header">
+        <div class="header-container">
+          <!-- Brand & Platform Identity -->
+          <div class="header-brand">
+            <div class="brand-badge">
+              <svg viewBox="0 0 24 24" width="20" height="20" stroke="currentColor" stroke-width="1.8" fill="none" stroke-linecap="round" stroke-linejoin="round">
+                <path d="M12 22s8-4 8-10V5l-8-3-8 3v7c0 6 8 10 8 10z"/>
+                <path d="M12 8v4"/>
+                <path d="M12 16h.01"/>
+              </svg>
+            </div>
+            <div class="brand-text">
+              <div class="brand-title-row">
+                <h1 class="brand-name" style="margin:0; font-size:inherit; font-weight:inherit; display:inline-block; line-height:inherit;">HeatShield</h1>
+                <span class="brand-version-pill">Ops 2.0</span>
+              </div>
+              <span class="brand-tagline">National Heatwave Defense &amp; Epidemiological Intelligence</span>
+            </div>
+          </div>
+
+          <!-- Center Search & Location Bar -->
+          <div class="header-center-controls">
+            <form id="search-form" class="search-form" onsubmit="event.preventDefault();">
+              <div class="search-input-wrap">
+                <svg class="search-svg" viewBox="0 0 24 24" width="15" height="15" stroke="currentColor" stroke-width="1.8" fill="none">
+                  <circle cx="11" cy="11" r="8"/>
+                  <line x1="21" y1="21" x2="16.65" y2="16.65"/>
+                </svg>
+                <input 
+                  type="text" 
+                  id="location-search" 
+                  placeholder="Search station, city, or coordinate..." 
+                  autocomplete="off"
+                />
+                <kbd class="search-kbd" title="Press '/' anywhere to search">/</kbd>
+                <button type="submit" id="search-btn" class="search-submit-btn">Search</button>
+              </div>
+            </form>
+          </div>
+
+          <!-- Right Action Toolbar -->
+          <div class="header-actions">
+            <button id="geolocate-btn" class="toolbar-btn" title="Acquire Device GPS Coordinate">
+              <svg viewBox="0 0 24 24" width="14" height="14" stroke="currentColor" stroke-width="1.8" fill="none"><polygon points="3 11 22 2 13 21 11 13 3 11"/></svg>
+              <span>GPS</span>
+            </button>
+
+            <button id="refresh-btn" class="toolbar-btn" title="Synchronize Live Atmospheric Data">
+              <svg id="refresh-icon" viewBox="0 0 24 24" width="14" height="14" stroke="currentColor" stroke-width="1.8" fill="none">
+                <polyline points="23 4 23 10 17 10"/>
+                <polyline points="1 20 1 14 7 14"/>
+                <path d="M3.51 9a9 9 0 0 1 14.85-3.36L23 10M1 14l4.64 4.36A9 9 0 0 0 20.49 15"/>
+              </svg>
+              <span>Sync</span>
+            </button>
+
+            <!-- Temperature Unit Toggle -->
+            <div class="unit-toggle" id="unit-toggle">
+              <button id="unit-c" class="unit-btn active" data-unit="C">°C</button>
+              <button id="unit-f" class="unit-btn" data-unit="F">°F</button>
+            </div>
+
+            <!-- Push Notifications Alert Bell -->
+            <button id="btn-notify-bell" class="toolbar-btn notify-bell-btn" title="Heatwave Early Warning Subscriptions">
+              <svg viewBox="0 0 24 24" width="15" height="15" stroke="currentColor" stroke-width="1.8" fill="none">
+                <path d="M18 8A6 6 0 0 0 6 8c0 7-3 9-3 9h18s-3-2-3-9"/>
+                <path d="M13.73 21a2 2 0 0 1-3.46 0"/>
+              </svg>
+              <span class="notify-badge-dot"></span>
+            </button>
+
+            <!-- PWA Install App Button -->
+            <button id="btn-pwa-install" class="toolbar-btn btn-pwa-install" title="Install HeatShield Pro App" style="display:none;">
+              <svg viewBox="0 0 24 24" width="14" height="14" stroke="currentColor" stroke-width="1.8" fill="none">
+                <path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/>
+                <polyline points="7 10 12 15 17 10"/>
+                <line x1="12" y1="15" x2="12" y2="3"/>
+              </svg>
+              <span>Install</span>
+            </button>
+
+            <!-- Quick Admin Demo Login Button -->
+            <button id="btn-quick-admin-demo" class="toolbar-btn btn-admin-demo" title="1-Click Login as Municipal Disaster Officer for Demo">
+              <svg viewBox="0 0 24 24" width="14" height="14" stroke="currentColor" stroke-width="2" fill="none"><path d="M12 22s8-4 8-10V5l-8-3-8 3v7c0 6 8 10 8 10z"/></svg>
+              <span id="btn-quick-admin-text">Admin Demo</span>
+            </button>
+
+            <!-- User Authentication & Profile Pill -->
+            <div class="auth-header-wrap" id="auth-header-wrap">
+              <button id="btn-auth-open" class="auth-pill-btn">
+                <span class="user-avatar" id="user-avatar-pill">PO</span>
+                <div class="user-meta-wrap">
+                  <span class="user-name-pill" id="user-name-pill">Public Observer</span>
+                  <span class="user-role-pill" id="user-role-pill">GUEST</span>
+                </div>
+              </button>
+            </div>
+          </div>
+        </div>
+      </header>
+
+      <!-- Always-Visible Operational Sticky Top Navigation Bar -->
+      <nav class="sticky-top-nav-bar" id="sticky-top-nav-bar" aria-label="Operations Navigation">
+        <div class="top-nav-container">
+          <div class="top-nav-scroller" id="top-nav-scroller">
+            <button type="button" class="top-nav-pill active" data-target="view-telemetry" id="top-nav-telemetry" title="Module 01: Atmospheric Boundary Telemetry">
+              <svg viewBox="0 0 24 24" width="13" height="13" stroke="currentColor" stroke-width="2" fill="none"><path d="M14 14.76V3.5a2.5 2.5 0 0 0-5 0v11.26a4.5 4.5 0 1 0 5 0z"/></svg>
+              <span>Telemetry</span>
+            </button>
+            <button type="button" class="top-nav-pill" data-target="view-biomet" id="top-nav-biomet" title="Module 02: Bio-Thermal Stress Indices">
+              <svg viewBox="0 0 24 24" width="13" height="13" stroke="currentColor" stroke-width="2" fill="none"><circle cx="12" cy="12" r="10"/><path d="M12 6v6l4 2"/></svg>
+              <span>Thermal Stress</span>
+              <span class="nav-mini-badge">6 Indices</span>
+            </button>
+            <button type="button" class="top-nav-pill" data-target="view-forecast" id="top-nav-forecast" title="Module 03: 48-Hour & 7-Day Precision Outlook">
+              <svg viewBox="0 0 24 24" width="13" height="13" stroke="currentColor" stroke-width="2" fill="none"><polyline points="22 12 18 12 15 21 9 3 6 12 2 12"/></svg>
+              <span>48H / 7D Forecast</span>
+            </button>
+            <button type="button" class="top-nav-pill" data-target="view-health" id="top-nav-health" title="Module 04: Clinical Guidance, Vulnerability & Hydration">
+              <svg viewBox="0 0 24 24" width="13" height="13" stroke="currentColor" stroke-width="2" fill="none"><path d="M22 12h-4l-3 9L9 3l-3 9H2"/></svg>
+              <span>Clinical &amp; Hydration</span>
+            </button>
+            <button type="button" class="top-nav-pill" data-target="view-shelters" id="top-nav-shelters" title="Module 05: Air-Conditioned Cooling Sanctuaries">
+              <svg viewBox="0 0 24 24" width="13" height="13" stroke="currentColor" stroke-width="2" fill="none"><path d="M3 9l9-7 9 7v11a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2z"/><polyline points="9 22 9 12 15 12 15 22"/></svg>
+              <span>Cooling Sanctuaries</span>
+              <span class="nav-mini-badge" id="top-shelter-count">Hubs</span>
+            </button>
+            <button type="button" class="top-nav-pill" data-target="view-map" id="top-nav-map" title="Module 06: Global Heat Risk Radar Map">
+              <svg viewBox="0 0 24 24" width="13" height="13" stroke="currentColor" stroke-width="2" fill="none"><polygon points="1 6 1 22 8 18 16 22 23 18 23 2 16 6 8 2 1 6"/><line x1="8" y1="2" x2="8" y2="18"/><line x1="16" y1="6" x2="16" y2="22"/></svg>
+              <span>Risk Radar Map</span>
+            </button>
+
+            <span class="top-nav-divider"></span>
+
+            <!-- Official Civil Defense Modules -->
+            <button type="button" class="top-nav-pill admin-nav-pill" data-target="view-epi" id="top-nav-epi" title="Module 07: Epidemiological Surge & Mortality Modeler">
+              <svg viewBox="0 0 24 24" width="13" height="13" stroke="currentColor" stroke-width="2" fill="none"><path d="M18 20V10M12 20V4M6 20v-6"/></svg>
+              <span>Surge Modeler</span>
+              <span class="nav-lock-icon">🔒</span>
+            </button>
+            <button type="button" class="top-nav-pill admin-nav-pill" data-target="view-ward" id="top-nav-ward" title="Module 08: Hyper-Local Ward GIS Chloropleth">
+              <svg viewBox="0 0 24 24" width="13" height="13" stroke="currentColor" stroke-width="2" fill="none"><rect x="3" y="3" width="18" height="18" rx="2"/><path d="M3 9h18M9 21V9"/></svg>
+              <span>Ward GIS</span>
+              <span class="nav-lock-icon">🔒</span>
+            </button>
+            <button type="button" class="top-nav-pill admin-nav-pill" data-target="view-hap" id="top-nav-hap" title="Module 09: Municipal Heat Action Plan Directives">
+              <svg viewBox="0 0 24 24" width="13" height="13" stroke="currentColor" stroke-width="2" fill="none"><path d="M12 2L2 7l10 5 10-5-10-5zM2 17l10 5 10-5M2 12l10 5 10-5"/></svg>
+              <span>HAP Directives</span>
+              <span class="nav-lock-icon">🔒</span>
+            </button>
+            <button type="button" class="top-nav-pill admin-nav-pill" data-target="view-dispatch" id="top-nav-dispatch" title="Module 10: Emergency Broadcast & Telecom Gateway">
+              <svg viewBox="0 0 24 24" width="13" height="13" stroke="currentColor" stroke-width="2" fill="none"><path d="M22 2L11 13M22 2l-7 20-4-9-9-4 20-7z"/></svg>
+              <span>Emergency Broadcast</span>
+              <span class="nav-lock-icon">🔒</span>
+            </button>
+            <button type="button" class="top-nav-pill admin-nav-pill" data-target="view-sim" id="top-nav-sim" title="Module 11: Policy Intervention Simulation & SitRep">
+              <svg viewBox="0 0 24 24" width="13" height="13" stroke="currentColor" stroke-width="2" fill="none"><circle cx="12" cy="12" r="3"/><path d="M19.4 15a1.65 1.65 0 0 0 .33 1.82l.06.06a2 2 0 0 1 0 2.83 2 2 0 0 1-2.83 0l-.06-.06a1.65 1.65 0 0 0-1.82-.33 1.65 1.65 0 0 0-1 1.51V21a2 2 0 0 1-2 2 2 2 0 0 1-2-2v-.09A1.65 1.65 0 0 0 9 19.4a1.65 1.65 0 0 0-1.82.33l-.06.06a2 2 0 0 1-2.83 0 2 2 0 0 1 0-2.83l.06-.06a1.65 1.65 0 0 0 .33-1.82 1.65 1.65 0 0 0-1.51-1H3a2 2 0 0 1-2-2 2 2 0 0 1 2-2h.09A1.65 1.65 0 0 0 4.6 9a1.65 1.65 0 0 0-.33-1.82l-.06-.06a2 2 0 0 1 0-2.83 2 2 0 0 1 2.83 0l.06.06a1.65 1.65 0 0 0 1.82.33H9a1.65 1.65 0 0 0 1-1.51V3a2 2 0 0 1 2-2 2 2 0 0 1 2 2v.09a1.65 1.65 0 0 0 1 1.51 1.65 1.65 0 0 0 1.82-.33l.06-.06a2 2 0 0 1 2.83 0 2 2 0 0 1 0 2.83l-.06.06a1.65 1.65 0 0 0-.33 1.82V9a1.65 1.65 0 0 0 1.51 1H21a2 2 0 0 1 2 2 2 2 0 0 1-2 2h-.09a1.65 1.65 0 0 0-1.51 1z"/></svg>
+              <span>Policy &amp; SitRep</span>
+              <span class="nav-lock-icon">🔒</span>
+            </button>
+          </div>
+
+          <!-- Quick Actions & Context in Nav Bar -->
+          <div class="top-nav-actions">
+            <div class="top-nav-station-badge" id="top-nav-station-tag" title="Active Station Location">
+              <span class="station-pulse-dot"></span>
+              <span id="nav-station-name">DEL • Delhi NCR</span>
+            </div>
+            <button type="button" id="btn-quick-top" class="top-nav-action-btn" title="Quick Scroll to Top" aria-label="Quick Scroll to Top">
+              <svg viewBox="0 0 24 24" width="13" height="13" stroke="currentColor" stroke-width="2.2" fill="none"><polyline points="18 15 12 9 6 15"/></svg>
+              <span>Top</span>
+            </button>
+          </div>
+        </div>
+      </nav>
+
+      <!-- Global Hotspot Stations Bar (National & International Benchmarks) -->
+      <section class="stations-bar-section">
+        <div class="stations-container">
+          <span class="stations-label">Station Benchmarks:</span>
+          <div class="stations-scroller" id="preset-chips">
+            <button class="station-chip active" data-lat="28.61" data-lon="77.23" data-name="Delhi, India">DEL • Delhi NCR</button>
+            <button class="station-chip" data-lat="23.02" data-lon="72.57" data-name="Ahmedabad, Gujarat, India">AMD • Ahmedabad</button>
+            <button class="station-chip" data-lat="19.08" data-lon="72.88" data-name="Mumbai, Maharashtra, India">BOM • Mumbai MMR</button>
+            <button class="station-chip" data-lat="22.57" data-lon="88.36" data-name="Kolkata, West Bengal, India">CCU • Kolkata</button>
+            <button class="station-chip" data-lat="17.38" data-lon="78.48" data-name="Hyderabad, Telangana, India">HYD • Hyderabad</button>
+            <button class="station-chip" data-lat="13.08" data-lon="80.27" data-name="Chennai, Tamil Nadu, India">MAA • Chennai</button>
+            <button class="station-chip" data-lat="21.14" data-lon="79.08" data-name="Nagpur, Maharashtra, India">NAG • Nagpur</button>
+            <button class="station-chip" data-lat="25.20" data-lon="55.27" data-name="Dubai, UAE">DXB • Dubai</button>
+            <button class="station-chip" data-lat="33.45" data-lon="-112.07" data-name="Phoenix, USA">PHX • Phoenix</button>
+            <button class="station-chip" data-lat="37.39" data-lon="-5.98" data-name="Seville, Spain">SVQ • Seville</button>
+            <button class="station-chip" data-lat="30.04" data-lon="31.24" data-name="Cairo, Egypt">CAI • Cairo</button>
+            <button class="station-chip" data-lat="13.75" data-lon="100.50" data-name="Bangkok, Thailand">BKK • Bangkok</button>
+          </div>
+        </div>
+      </section>
+
+      <!-- Master Operational Container: Multi-Page Views -->
+      <main class="dashboard-main" id="dashboard-views-container">
+
+        <!-- ================================================================ -->
+        <!-- VIEW 1: ATMOSPHERIC BOUNDARY TELEMETRY & OBSERVATIONS            -->
+        <!-- ================================================================ -->
+        <div class="dashboard-view-page active-view" id="view-telemetry">
+          <!-- Hero Threat Advisory Header Banner -->
+          <section class="hero-threat-section">
+            <div id="alert-banner" class="hero-threat-card alert-green">
+              <div class="threat-card-inner">
+                <!-- Threat Level Badge -->
+                <div class="threat-level-column">
+                  <div class="threat-radar-box" id="radar-ring">
+                    <span class="threat-radar-dot" id="alert-icon">
+                      <svg viewBox="0 0 24 24" width="16" height="16" stroke="currentColor" stroke-width="2" fill="none"><circle cx="12" cy="12" r="10"/><path d="M12 8v4M12 16h.01"/></svg>
+                    </span>
+                  </div>
+                  <span class="threat-level-tag" id="threat-level-tag">Stage 1 • Normal Conditions</span>
+                </div>
+
+                <!-- Threat Narrative & Meta -->
+                <div class="threat-content-column">
+                  <div class="threat-meta-row">
+                    <div class="meta-item" id="location-pill">
+                      <svg viewBox="0 0 24 24" width="12" height="12" stroke="currentColor" stroke-width="1.8" fill="none"><path d="M21 10c0 7-9 13-9 13s-9-6-9-13a9 9 0 0 1 18 0z"/><circle cx="12" cy="10" r="3"/></svg>
+                      <span id="location-name">Synchronizing observation station...</span>
+                    </div>
+                    <div class="meta-item" id="time-pill">
+                      <svg viewBox="0 0 24 24" width="12" height="12" stroke="currentColor" stroke-width="1.8" fill="none"><circle cx="12" cy="12" r="10"/><polyline points="12 6 12 12 16 14"/></svg>
+                      <span id="update-time">Live Telemetry</span>
+                    </div>
+                    <div class="meta-item heatwave-badge-pill" id="heatwave-badge">
+                      <span class="hw-status-inner">Checking Atmospheric Stability</span>
+                    </div>
+                  </div>
+
+                  <h2 id="alert-title" class="threat-heading">Atmospheric Boundary Telemetry Active</h2>
+                  <p id="alert-message" class="threat-desc">
+                    Multi-node biometeorological observations online. Real-time convective dissipation, vapor pressure deficit, and universal thermal climate stress computed.
+                  </p>
+                </div>
+
+                <!-- Quick Numerical Threat Readouts -->
+                <div class="threat-readouts-column">
+                  <div class="threat-readout-item">
+                    <span class="threat-readout-label">Heat Index</span>
+                    <span class="threat-readout-val tabular-num" id="hero-stat-hi">--</span>
+                  </div>
+                  <div class="threat-readout-sep"></div>
+                  <div class="threat-readout-item">
+                    <span class="threat-readout-label">WBGT Stress</span>
+                    <span class="threat-readout-val tabular-num" id="hero-stat-wbgt">--</span>
+                  </div>
+                </div>
+              </div>
+            </div>
+          </section>
+
+          <section class="dashboard-section" id="section-telemetry">
+            <div class="section-header">
+              <div class="section-title-wrap">
+                <h2 class="section-heading">Atmospheric Boundary Observations</h2>
+              </div>
+            </div>
+
+      <!-- Precision Telemetry Grid (Clean Scientific Bench) -->
+      <div class="telemetry-bento-grid">
+        <!-- Temp Card -->
+        <div class="telemetry-card" id="card-temp">
+          <div class="telemetry-header">
+            <div class="telemetry-title-wrap">
+              <svg viewBox="0 0 24 24" width="14" height="14" stroke="#f97316" stroke-width="1.8" fill="none"><path d="M14 14.76V3.5a2.5 2.5 0 0 0-5 0v11.26a4.5 4.5 0 1 0 5 0z"/></svg>
+              <span class="telemetry-label">Dry-Bulb Temperature</span>
+            </div>
+            <span class="telemetry-chip" id="apparent-temp-badge">Feels like --°</span>
+          </div>
+          <div class="telemetry-value-wrap">
+            <span class="telemetry-value tabular-num" id="current-temp">--</span>
+            <span class="telemetry-unit" id="unit-label-temp">°C</span>
+          </div>
+          <div class="telemetry-meta-row">
+            <span>Baseline range</span>
+            <span id="temp-scale-center" class="tabular-num">25°C Nominal</span>
+          </div>
+        </div>
+
+        <!-- Humidity Card -->
+        <div class="telemetry-card" id="card-humidity">
+          <div class="telemetry-header">
+            <div class="telemetry-title-wrap">
+              <svg viewBox="0 0 24 24" width="14" height="14" stroke="currentColor" stroke-width="1.8" fill="none"><path d="M12 2.69l5.66 5.66a8 8 0 1 1-11.31 0z"/></svg>
+              <span class="telemetry-label">Relative Humidity</span>
+            </div>
+            <span class="telemetry-chip" id="dewpoint-mini-badge">Dew point --°</span>
+          </div>
+          <div class="telemetry-value-wrap">
+            <span class="telemetry-value tabular-num" id="current-humidity">--</span>
+            <span class="telemetry-unit">%</span>
+          </div>
+          <div class="telemetry-meta-row">
+            <span>Moisture saturation</span>
+            <span class="tabular-num">RH Scale 0–100%</span>
+          </div>
+        </div>
+
+        <!-- Wind Card -->
+        <div class="telemetry-card" id="card-wind">
+          <div class="telemetry-header">
+            <div class="telemetry-title-wrap">
+              <svg viewBox="0 0 24 24" width="14" height="14" stroke="currentColor" stroke-width="1.8" fill="none"><path d="M17.7 7.7a2.5 2.5 0 1 1 1.8 4.3H2M14.7 17.7a2.5 2.5 0 1 0 1.8-4.3H2M9.7 4.7a2 2 0 1 1 1.4 3.4H2"/></svg>
+              <span class="telemetry-label">Wind Convection</span>
+            </div>
+            <span class="telemetry-chip" id="wind-ms-badge">-- m/s</span>
+          </div>
+          <div class="telemetry-value-wrap">
+            <span class="telemetry-value tabular-num" id="current-wind">--</span>
+            <span class="telemetry-unit" id="unit-label-wind">km/h</span>
+          </div>
+          <div class="telemetry-meta-row">
+            <span>Evaporative cooling flux</span>
+            <span>Surface boundary layer</span>
+          </div>
+        </div>
+
+        <!-- Solar Card -->
+        <div class="telemetry-card" id="card-radiation">
+          <div class="telemetry-header">
+            <div class="telemetry-title-wrap">
+              <svg viewBox="0 0 24 24" width="14" height="14" stroke="#f59e0b" stroke-width="1.8" fill="none"><circle cx="12" cy="12" r="4"/><path d="M12 2v2M12 20v2M4.93 4.93l1.41 1.41M17.66 17.66l1.41 1.41M2 12h2M20 12h2M6.34 17.66l-1.41 1.41M19.07 4.93l-1.41 1.41"/></svg>
+              <span class="telemetry-label">Solar Irradiance</span>
+            </div>
+            <span class="telemetry-chip" id="uv-badge">Solar flux</span>
+          </div>
+          <div class="telemetry-value-wrap">
+            <span class="telemetry-value tabular-num" id="current-radiation">--</span>
+            <span class="telemetry-unit">W/m²</span>
+          </div>
+          <div class="telemetry-meta-row">
+            <span>Direct + diffuse flux</span>
+            <span>Shortwave solar</span>
+          </div>
+        </div>
+      </div>
+    </section>
+  </div><!-- /view-telemetry -->
+
+  <!-- ================================================================ -->
+  <!-- VIEW 2: BIO-THERMAL STRESS SUITE                                 -->
+  <!-- ================================================================ -->
+  <div class="dashboard-view-page" id="view-biomet">
+    <section class="dashboard-section" id="section-biomet">
+      <div class="section-header">
+        <div class="section-title-wrap">
+          <h2 class="section-heading">Multi-Model Biometeorological Stress Suite</h2>
+        </div>
+      </div>
+
+      <div class="biomet-layout">
+        <!-- Precision Arc Dial Gauge Card -->
+        <div class="gauge-panel-card">
+          <div class="gauge-panel-top">
+            <div>
+              <h3 class="panel-card-title">Biometeorological Strain Gauge</h3>
+              <span class="panel-card-sub">NOAA Multi-Polynomial Steadman Model</span>
+            </div>
+            <span class="gauge-status-badge" id="gauge-badge-pill">Normal</span>
+          </div>
+
+          <div class="gauge-viewport">
+            <svg id="stress-gauge" viewBox="0 0 320 210" class="gauge-svg">
+              <path d="M 35 175 A 125 125 0 0 1 285 175" fill="none" stroke="rgba(255,255,255,0.06)" stroke-width="16" stroke-linecap="round" />
+              <path d="M 35 175 A 125 125 0 0 1 80 65" fill="none" stroke="#10b981" stroke-width="12" stroke-linecap="round" />
+              <path d="M 86 60 A 125 125 0 0 1 138 32" fill="none" stroke="#f59e0b" stroke-width="12" stroke-linecap="round" />
+              <path d="M 144 31 A 125 125 0 0 1 176 31" fill="none" stroke="#f97316" stroke-width="12" stroke-linecap="round" />
+              <path d="M 182 32 A 125 125 0 0 1 234 60" fill="none" stroke="#ef4444" stroke-width="12" stroke-linecap="round" />
+              <path d="M 240 65 A 125 125 0 0 1 285 175" fill="none" stroke="#b91c1c" stroke-width="12" stroke-linecap="round" />
+
+              <text x="36" y="198" text-anchor="middle" class="svg-tick-txt">20°</text>
+              <text x="82" y="48" text-anchor="middle" class="svg-tick-txt">30°</text>
+              <text x="160" y="18" text-anchor="middle" class="svg-tick-txt">40°</text>
+              <text x="238" y="48" text-anchor="middle" class="svg-tick-txt">50°</text>
+              <text x="284" y="198" text-anchor="middle" class="svg-tick-txt">60°</text>
+
+              <g id="gauge-needle-group" transform="rotate(-90 160 175)">
+                <polygon id="gauge-needle" points="160,38 156,175 164,175" fill="#f8fafc" />
+                <circle cx="160" cy="175" r="9" fill="#0284c7" />
+                <circle cx="160" cy="175" r="3.5" fill="#060911" />
+              </g>
+
+              <text x="160" y="136" text-anchor="middle" class="svg-gauge-val tabular-num" id="gauge-value-text">--</text>
+              <text x="160" y="156" text-anchor="middle" class="svg-gauge-unit" id="gauge-unit-text">°C Heat Index</text>
+              <text x="160" y="190" text-anchor="middle" class="svg-gauge-status" id="gauge-label-text">NORMAL</text>
+            </svg>
+          </div>
+
+          <div class="gauge-summary-box">
+            <div class="gauge-number-row">
+              <span id="gauge-heat-index" class="gauge-large-val tabular-num">--</span>
+              <span class="gauge-large-unit" id="unit-label-gauge">°C</span>
+            </div>
+            <div class="gauge-pill" id="gauge-category-pill">Normal</div>
+            <p class="gauge-desc" id="gauge-statement">Processing biometeorological conditions...</p>
+          </div>
+        </div>
+
+        <!-- 6 High-Tech Indices Cards Grid -->
+        <div class="indices-grid">
+          <!-- 1. NOAA Heat Index -->
+          <div class="index-card" id="card-idx-hi">
+            <div class="index-card-top">
+              <span class="index-card-title">NOAA Heat Index</span>
+              <span class="index-chip">Apparent</span>
+            </div>
+            <div class="index-val tabular-num" id="idx-heat-index">--</div>
+            <div class="index-status" id="idx-heat-index-status">Calculating...</div>
+            <p class="index-desc">Perceived temperature combining dry bulb temp and relative humidity.</p>
+          </div>
+
+          <!-- 2. WBGT Outdoor (ISO 7243) -->
+          <div class="index-card" id="card-idx-wbgt">
+            <div class="index-card-top">
+              <span class="index-card-title">WBGT (Outdoor)</span>
+              <span class="index-chip chip-iso">ISO 7243</span>
+            </div>
+            <div class="index-val tabular-num" id="idx-wbgt">--</div>
+            <div class="index-status" id="idx-wbgt-status">Calculating...</div>
+            <p class="index-desc">Standard for occupational labor, solar globe, and athletics.</p>
+          </div>
+
+          <!-- 3. Universal Thermal Climate Index (UTCI) -->
+          <div class="index-card" id="card-idx-utci">
+            <div class="index-card-top">
+              <span class="index-card-title">UTCI Index</span>
+              <span class="index-chip">Fiala Model</span>
+            </div>
+            <div class="index-val tabular-num" id="idx-utci">--</div>
+            <div class="index-status" id="idx-utci-status">Calculating...</div>
+            <p class="index-desc">Multi-node human thermoregulation dynamic metabolic model.</p>
+          </div>
+
+          <!-- 4. Wet-Bulb Limit -->
+          <div class="index-card" id="card-idx-wetbulb">
+            <div class="index-card-top">
+              <span class="index-card-title">Wet-Bulb Limit</span>
+              <span class="index-chip chip-vital">Vital Limit</span>
+            </div>
+            <div class="index-val tabular-num" id="idx-wetbulb">--</div>
+            <div class="index-status" id="idx-wetbulb-status">Calculating...</div>
+            <p class="index-desc">Evaporative cooling threshold. Values &gt; 35°C exceed physiological tolerance.</p>
+          </div>
+
+          <!-- 5. Canadian Humidex -->
+          <div class="index-card" id="card-idx-humidex">
+            <div class="index-card-top">
+              <span class="index-card-title">Canadian Humidex</span>
+              <span class="index-chip">Vapor Press.</span>
+            </div>
+            <div class="index-val tabular-num" id="idx-humidex">--</div>
+            <div class="index-status" id="idx-humidex-status">Calculating...</div>
+            <p class="index-desc">Perceived mugginess based on absolute vapor pressure deficit.</p>
+          </div>
+
+          <!-- 6. Dew Point -->
+          <div class="index-card" id="card-idx-dewpoint">
+            <div class="index-card-top">
+              <span class="index-card-title">Dew Point</span>
+              <span class="index-chip">Saturation</span>
+            </div>
+            <div class="index-val tabular-num" id="idx-dewpoint">--</div>
+            <div class="index-status" id="idx-dewpoint-status">Calculating...</div>
+            <p class="index-desc">Saturation boundary. Dew points &gt; 24°C impede human perspiration.</p>
+          </div>
+        </div>
+      </div>
+    </section>
+  </div><!-- /view-biomet -->
+
+  <!-- ================================================================ -->
+  <!-- VIEW 3: 48-HOUR TIMELINE & 7-DAY OUTLOOK                         -->
+  <!-- ================================================================ -->
+  <div class="dashboard-view-page" id="view-forecast">
+    <section class="dashboard-section" id="section-forecast">
+      <div class="section-header">
+        <div class="section-title-wrap">
+          <h2 class="section-heading">48-Hour Thermal Trajectory &amp; 7-Day Outlook</h2>
+        </div>
+        <div class="timeline-controls">
+          <div class="segmented-control">
+            <button class="seg-btn active" id="btn-chart-48h">48 Hours</button>
+            <button class="seg-btn" id="btn-chart-24h">24 Hours</button>
+          </div>
+        </div>
+      </div>
+
+      <div class="chart-panel bento-card">
+        <div class="chart-panel-header">
+          <div class="chart-legend-wrap">
+            <span class="c-legend"><span class="c-dot dot-temp"></span> Temperature</span>
+            <span class="c-legend"><span class="c-dot dot-hi"></span> Heat Index</span>
+            <span class="c-legend"><span class="c-dot dot-wbgt"></span> WBGT</span>
+            <span class="c-legend"><span class="c-dot dot-tw"></span> Wet-Bulb</span>
+          </div>
+          <span class="chart-danger-tag" id="danger-zone-legend">Shaded Area: Danger Zone (&gt;40°C)</span>
+        </div>
+        <div class="chart-canvas-wrap">
+          <canvas id="hourly-chart"></canvas>
+          <div class="chart-skeleton-wrap" id="chart-skeleton">
+            <div class="chart-skeleton-bars">
+              <div class="chart-skeleton-bar-item skeleton-shimmer" style="height: 45%;"></div>
+              <div class="chart-skeleton-bar-item skeleton-shimmer" style="height: 60%;"></div>
+              <div class="chart-skeleton-bar-item skeleton-shimmer" style="height: 80%;"></div>
+              <div class="chart-skeleton-bar-item skeleton-shimmer" style="height: 95%;"></div>
+              <div class="chart-skeleton-bar-item skeleton-shimmer" style="height: 90%;"></div>
+              <div class="chart-skeleton-bar-item skeleton-shimmer" style="height: 70%;"></div>
+              <div class="chart-skeleton-bar-item skeleton-shimmer" style="height: 50%;"></div>
+              <div class="chart-skeleton-bar-item skeleton-shimmer" style="height: 40%;"></div>
+              <div class="chart-skeleton-bar-item skeleton-shimmer" style="height: 65%;"></div>
+              <div class="chart-skeleton-bar-item skeleton-shimmer" style="height: 85%;"></div>
+              <div class="chart-skeleton-bar-item skeleton-shimmer" style="height: 75%;"></div>
+              <div class="chart-skeleton-bar-item skeleton-shimmer" style="height: 55%;"></div>
+            </div>
+            <div class="chart-skeleton-status">
+              <span class="skeleton-shimmer skeleton-circle" style="width: 12px; height: 12px;"></span>
+              <span>Calibrating 48-Hour Atmospheric Boundary Trajectory...</span>
+            </div>
+          </div>
+        </div>
+      </div>
+
+      <!-- 7-Day Cards -->
+      <div class="forecast-scroller">
+        <div class="forecast-grid" id="forecast-grid">
+          <div class="forecast-card skeleton-forecast" style="border-top: 3px solid rgba(255,255,255,0.08);">
+            <div class="forecast-card-body">
+              <div class="forecast-date-header" style="gap:4px; align-items:center;">
+                <span class="skeleton-shimmer skeleton-text" style="width:36px; height:13px;"></span>
+                <span class="skeleton-shimmer skeleton-text" style="width:48px; height:10px;"></span>
+              </div>
+              <div class="forecast-icon-box"><span class="skeleton-shimmer skeleton-circle" style="width:32px; height:32px;"></span></div>
+              <div class="forecast-temps-row" style="gap:6px; justify-content:center;">
+                <span class="skeleton-shimmer skeleton-val-sm" style="width:32px; height:15px;"></span>
+                <span class="skeleton-shimmer skeleton-val-sm" style="width:26px; height:13px;"></span>
+              </div>
+              <div class="forecast-peak-hi-row" style="gap:4px;">
+                <span class="skeleton-shimmer skeleton-text" style="width:52px; height:9px;"></span>
+                <span class="skeleton-shimmer skeleton-text" style="width:28px; height:12px;"></span>
+              </div>
+            </div>
+            <div class="forecast-risk-ribbon skeleton-shimmer" style="height:22px; width:100%;"></div>
+          </div>
+          <div class="forecast-card skeleton-forecast" style="border-top: 3px solid rgba(255,255,255,0.08);">
+            <div class="forecast-card-body">
+              <div class="forecast-date-header" style="gap:4px; align-items:center;">
+                <span class="skeleton-shimmer skeleton-text" style="width:36px; height:13px;"></span>
+                <span class="skeleton-shimmer skeleton-text" style="width:48px; height:10px;"></span>
+              </div>
+              <div class="forecast-icon-box"><span class="skeleton-shimmer skeleton-circle" style="width:32px; height:32px;"></span></div>
+              <div class="forecast-temps-row" style="gap:6px; justify-content:center;">
+                <span class="skeleton-shimmer skeleton-val-sm" style="width:32px; height:15px;"></span>
+                <span class="skeleton-shimmer skeleton-val-sm" style="width:26px; height:13px;"></span>
+              </div>
+              <div class="forecast-peak-hi-row" style="gap:4px;">
+                <span class="skeleton-shimmer skeleton-text" style="width:52px; height:9px;"></span>
+                <span class="skeleton-shimmer skeleton-text" style="width:28px; height:12px;"></span>
+              </div>
+            </div>
+            <div class="forecast-risk-ribbon skeleton-shimmer" style="height:22px; width:100%;"></div>
+          </div>
+          <div class="forecast-card skeleton-forecast" style="border-top: 3px solid rgba(255,255,255,0.08);">
+            <div class="forecast-card-body">
+              <div class="forecast-date-header" style="gap:4px; align-items:center;">
+                <span class="skeleton-shimmer skeleton-text" style="width:36px; height:13px;"></span>
+                <span class="skeleton-shimmer skeleton-text" style="width:48px; height:10px;"></span>
+              </div>
+              <div class="forecast-icon-box"><span class="skeleton-shimmer skeleton-circle" style="width:32px; height:32px;"></span></div>
+              <div class="forecast-temps-row" style="gap:6px; justify-content:center;">
+                <span class="skeleton-shimmer skeleton-val-sm" style="width:32px; height:15px;"></span>
+                <span class="skeleton-shimmer skeleton-val-sm" style="width:26px; height:13px;"></span>
+              </div>
+              <div class="forecast-peak-hi-row" style="gap:4px;">
+                <span class="skeleton-shimmer skeleton-text" style="width:52px; height:9px;"></span>
+                <span class="skeleton-shimmer skeleton-text" style="width:28px; height:12px;"></span>
+              </div>
+            </div>
+            <div class="forecast-risk-ribbon skeleton-shimmer" style="height:22px; width:100%;"></div>
+          </div>
+          <div class="forecast-card skeleton-forecast" style="border-top: 3px solid rgba(255,255,255,0.08);">
+            <div class="forecast-card-body">
+              <div class="forecast-date-header" style="gap:4px; align-items:center;">
+                <span class="skeleton-shimmer skeleton-text" style="width:36px; height:13px;"></span>
+                <span class="skeleton-shimmer skeleton-text" style="width:48px; height:10px;"></span>
+              </div>
+              <div class="forecast-icon-box"><span class="skeleton-shimmer skeleton-circle" style="width:32px; height:32px;"></span></div>
+              <div class="forecast-temps-row" style="gap:6px; justify-content:center;">
+                <span class="skeleton-shimmer skeleton-val-sm" style="width:32px; height:15px;"></span>
+                <span class="skeleton-shimmer skeleton-val-sm" style="width:26px; height:13px;"></span>
+              </div>
+              <div class="forecast-peak-hi-row" style="gap:4px;">
+                <span class="skeleton-shimmer skeleton-text" style="width:52px; height:9px;"></span>
+                <span class="skeleton-shimmer skeleton-text" style="width:28px; height:12px;"></span>
+              </div>
+            </div>
+            <div class="forecast-risk-ribbon skeleton-shimmer" style="height:22px; width:100%;"></div>
+          </div>
+          <div class="forecast-card skeleton-forecast" style="border-top: 3px solid rgba(255,255,255,0.08);">
+            <div class="forecast-card-body">
+              <div class="forecast-date-header" style="gap:4px; align-items:center;">
+                <span class="skeleton-shimmer skeleton-text" style="width:36px; height:13px;"></span>
+                <span class="skeleton-shimmer skeleton-text" style="width:48px; height:10px;"></span>
+              </div>
+              <div class="forecast-icon-box"><span class="skeleton-shimmer skeleton-circle" style="width:32px; height:32px;"></span></div>
+              <div class="forecast-temps-row" style="gap:6px; justify-content:center;">
+                <span class="skeleton-shimmer skeleton-val-sm" style="width:32px; height:15px;"></span>
+                <span class="skeleton-shimmer skeleton-val-sm" style="width:26px; height:13px;"></span>
+              </div>
+              <div class="forecast-peak-hi-row" style="gap:4px;">
+                <span class="skeleton-shimmer skeleton-text" style="width:52px; height:9px;"></span>
+                <span class="skeleton-shimmer skeleton-text" style="width:28px; height:12px;"></span>
+              </div>
+            </div>
+            <div class="forecast-risk-ribbon skeleton-shimmer" style="height:22px; width:100%;"></div>
+          </div>
+          <div class="forecast-card skeleton-forecast" style="border-top: 3px solid rgba(255,255,255,0.08);">
+            <div class="forecast-card-body">
+              <div class="forecast-date-header" style="gap:4px; align-items:center;">
+                <span class="skeleton-shimmer skeleton-text" style="width:36px; height:13px;"></span>
+                <span class="skeleton-shimmer skeleton-text" style="width:48px; height:10px;"></span>
+              </div>
+              <div class="forecast-icon-box"><span class="skeleton-shimmer skeleton-circle" style="width:32px; height:32px;"></span></div>
+              <div class="forecast-temps-row" style="gap:6px; justify-content:center;">
+                <span class="skeleton-shimmer skeleton-val-sm" style="width:32px; height:15px;"></span>
+                <span class="skeleton-shimmer skeleton-val-sm" style="width:26px; height:13px;"></span>
+              </div>
+              <div class="forecast-peak-hi-row" style="gap:4px;">
+                <span class="skeleton-shimmer skeleton-text" style="width:52px; height:9px;"></span>
+                <span class="skeleton-shimmer skeleton-text" style="width:28px; height:12px;"></span>
+              </div>
+            </div>
+            <div class="forecast-risk-ribbon skeleton-shimmer" style="height:22px; width:100%;"></div>
+          </div>
+          <div class="forecast-card skeleton-forecast" style="border-top: 3px solid rgba(255,255,255,0.08);">
+            <div class="forecast-card-body">
+              <div class="forecast-date-header" style="gap:4px; align-items:center;">
+                <span class="skeleton-shimmer skeleton-text" style="width:36px; height:13px;"></span>
+                <span class="skeleton-shimmer skeleton-text" style="width:48px; height:10px;"></span>
+              </div>
+              <div class="forecast-icon-box"><span class="skeleton-shimmer skeleton-circle" style="width:32px; height:32px;"></span></div>
+              <div class="forecast-temps-row" style="gap:6px; justify-content:center;">
+                <span class="skeleton-shimmer skeleton-val-sm" style="width:32px; height:15px;"></span>
+                <span class="skeleton-shimmer skeleton-val-sm" style="width:26px; height:13px;"></span>
+              </div>
+              <div class="forecast-peak-hi-row" style="gap:4px;">
+                <span class="skeleton-shimmer skeleton-text" style="width:52px; height:9px;"></span>
+                <span class="skeleton-shimmer skeleton-text" style="width:28px; height:12px;"></span>
+              </div>
+            </div>
+            <div class="forecast-risk-ribbon skeleton-shimmer" style="height:22px; width:100%;"></div>
+          </div>
+        </div>
+      </div>
+    </section>
+  </div><!-- /view-forecast -->
+
+  <!-- ================================================================ -->
+  <!-- VIEW 4: CLINICAL PROTECTION, HYDRATION & TRIAGE                  -->
+  <!-- ================================================================ -->
+  <div class="dashboard-view-page" id="view-health">
+    <section class="dashboard-section" id="section-health">
+      <div class="section-header">
+        <div class="section-title-wrap">
+          <h2 class="section-heading">Clinical Guidance, Hydration &amp; Medical Triage</h2>
+        </div>
+      </div>
+
+      <div class="health-bento-grid">
+        <!-- Safety Protocol Checklist -->
+        <div class="bento-card health-box">
+          <div class="bento-box-head">
+            <h3 class="panel-card-title">Action Protocols</h3>
+            <span class="bento-chip">Action Checklist</span>
+          </div>
+          <div class="recommendations-list" id="recommendations-list">
+            <div class="skeleton-row">
+              <div class="skeleton-shimmer skeleton-circle" style="width:18px; height:18px;"></div>
+              <div style="flex:1;">
+                <div class="skeleton-shimmer skeleton-text" style="width:75%; height:13px; margin-bottom:4px;"></div>
+                <div class="skeleton-shimmer skeleton-text" style="width:90%; height:11px;"></div>
+              </div>
+            </div>
+            <div class="skeleton-row">
+              <div class="skeleton-shimmer skeleton-circle" style="width:18px; height:18px;"></div>
+              <div style="flex:1;">
+                <div class="skeleton-shimmer skeleton-text" style="width:70%; height:13px; margin-bottom:4px;"></div>
+                <div class="skeleton-shimmer skeleton-text" style="width:85%; height:11px;"></div>
+              </div>
+            </div>
+            <div class="skeleton-row">
+              <div class="skeleton-shimmer skeleton-circle" style="width:18px; height:18px;"></div>
+              <div style="flex:1;">
+                <div class="skeleton-shimmer skeleton-text" style="width:80%; height:13px; margin-bottom:4px;"></div>
+                <div class="skeleton-shimmer skeleton-text" style="width:65%; height:11px;"></div>
+              </div>
+            </div>
+            <div class="skeleton-row">
+              <div class="skeleton-shimmer skeleton-circle" style="width:18px; height:18px;"></div>
+              <div style="flex:1;">
+                <div class="skeleton-shimmer skeleton-text" style="width:65%; height:13px; margin-bottom:4px;"></div>
+                <div class="skeleton-shimmer skeleton-text" style="width:80%; height:11px;"></div>
+              </div>
+            </div>
+          </div>
+        </div>
+
+        <!-- Vulnerable Demographics -->
+        <div class="bento-card health-box">
+          <div class="bento-box-head">
+            <h3 class="panel-card-title">Priority Cohorts</h3>
+            <span class="bento-chip chip-orange">High Priority</span>
+          </div>
+          <div class="vulnerable-groups" id="vulnerable-groups">
+            <div class="skeleton-row" style="padding:0.75rem;">
+              <div class="skeleton-shimmer skeleton-circle" style="width:24px; height:24px;"></div>
+              <div style="flex:1;">
+                <div class="skeleton-shimmer skeleton-text" style="width:45%; height:14px; margin-bottom:5px;"></div>
+                <div class="skeleton-shimmer skeleton-text" style="width:85%; height:11px;"></div>
+              </div>
+            </div>
+            <div class="skeleton-row" style="padding:0.75rem;">
+              <div class="skeleton-shimmer skeleton-circle" style="width:24px; height:24px;"></div>
+              <div style="flex:1;">
+                <div class="skeleton-shimmer skeleton-text" style="width:50%; height:14px; margin-bottom:5px;"></div>
+                <div class="skeleton-shimmer skeleton-text" style="width:80%; height:11px;"></div>
+              </div>
+            </div>
+            <div class="skeleton-row" style="padding:0.75rem;">
+              <div class="skeleton-shimmer skeleton-circle" style="width:24px; height:24px;"></div>
+              <div style="flex:1;">
+                <div class="skeleton-shimmer skeleton-text" style="width:40%; height:14px; margin-bottom:5px;"></div>
+                <div class="skeleton-shimmer skeleton-text" style="width:90%; height:11px;"></div>
+              </div>
+            </div>
+          </div>
+        </div>
+
+        <!-- Hydration Requirement Model -->
+        <div class="bento-card health-box">
+          <div class="bento-box-head">
+            <h3 class="panel-card-title">Hydration Requirement Model</h3>
+            <span class="bento-chip chip-accent">Dynamic Model</span>
+          </div>
+          <div class="hydration-sim-layout">
+            <div class="hydration-controls">
+              <div class="sim-field">
+                <div class="sim-field-head">
+                  <label for="body-weight">Body Weight</label>
+                  <span class="tabular-num" id="weight-display">70 kg</span>
+                </div>
+                <input type="range" id="body-weight" class="range-slider" min="40" max="130" value="70" step="1">
+              </div>
+
+              <div class="sim-field">
+                <label for="activity-level" class="field-label">Activity &amp; Sun Exposure</label>
+                <select id="activity-level" class="select-dropdown">
+                  <option value="low">Sedentary / Air Conditioned</option>
+                  <option value="moderate" selected>Moderate / Light Outdoor Labor</option>
+                  <option value="heavy">Heavy Physical Labor / Athletics</option>
+                </select>
+              </div>
+
+              <div class="hydro-targets-row">
+                <div class="hydro-target-item">
+                  <span class="hydro-val tabular-num" id="hourly-water">250 ml</span>
+                  <span class="hydro-lbl">Hourly Target</span>
+                </div>
+                <div class="hydro-target-item">
+                  <span class="hydro-val tabular-num" id="daily-water">3.2 L</span>
+                  <span class="hydro-lbl">Daily Quota</span>
+                </div>
+              </div>
+            </div>
+
+            <div class="bottle-visualizer">
+              <svg viewBox="0 0 100 200" class="bottle-svg">
+                <defs>
+                  <clipPath id="bottle-clip">
+                    <path d="M 38 10 L 62 10 L 62 30 L 75 45 L 75 185 A 10 10 0 0 1 65 195 L 35 195 A 10 10 0 0 1 25 185 L 25 45 L 38 30 Z" />
+                  </clipPath>
+                </defs>
+                <rect x="35" y="2" width="30" height="8" rx="2" fill="#0284c7" />
+                <path d="M 38 10 L 62 10 L 62 30 L 75 45 L 75 185 A 10 10 0 0 1 65 195 L 35 195 A 10 10 0 0 1 25 185 L 25 45 L 38 30 Z" fill="rgba(255,255,255,0.04)" stroke="rgba(2, 132, 199, 0.4)" stroke-width="2" />
+                <g clip-path="url(#bottle-clip)">
+                  <rect id="bottle-water-fill" x="0" y="80" width="100" height="120" fill="#0284c7" opacity="0.9" />
+                  <text id="bottle-pct-text" x="50" y="160" text-anchor="middle" fill="#ffffff" font-family="Plus Jakarta Sans" font-size="13" font-weight="800">65%</text>
+                </g>
+              </svg>
+            </div>
+          </div>
+          <div class="hydration-tip-box" id="hydration-tip">
+            Clinical Recommendation: Pre-hydrate at regular 20-minute intervals before physiological thirst triggers.
+          </div>
+        </div>
+
+        <!-- Clinical Heat Illness Triage -->
+        <div class="bento-card health-box">
+          <div class="bento-box-head">
+            <h3 class="panel-card-title">Clinical Heat Illness Triage</h3>
+            <span class="bento-chip chip-red">Emergency Protocol</span>
+          </div>
+          <div class="triage-cards-list">
+            <div class="triage-card stage-cramps">
+              <div class="triage-card-head"><span class="stage-tag">Stage 1 • Mild</span><h4 class="stage-name">Heat Cramps</h4></div>
+              <p class="stage-desc">Profuse sweating, involuntary muscle fasciculations in calves/abdomen.</p>
+              <div class="stage-action"><b>First Aid</b>: Rest in shaded cooling area; administer oral rehydration salts (ORS).</div>
+            </div>
+            <div class="triage-card stage-exhaustion">
+              <div class="triage-card-head"><span class="stage-tag">Stage 2 • Moderate</span><h4 class="stage-name">Heat Exhaustion</h4></div>
+              <p class="stage-desc">Orthostatic hypotension, core temp 38–40°C, tachycardia, pale clammy skin.</p>
+              <div class="stage-action"><b>First Aid</b>: Transfer to AC room; apply conductive evaporative cooling towels.</div>
+            </div>
+            <div class="triage-card stage-stroke">
+              <div class="triage-card-head"><span class="stage-tag tag-emergency">Stage 3 • CRITICAL MEDICAL EMERGENCY</span><h4 class="stage-name">Heat Stroke</h4></div>
+              <p class="stage-desc">Core temp &gt; 40°C, delirium/coma, hot dry erythematous skin.</p>
+              <div class="stage-action action-emergency"><b>URGENT</b>: CALL 112 / 911 IMMEDIATELY. Whole-body ice water immersion.</div>
+            </div>
+          </div>
+        </div>
+      </div>
+    </section>
+  </div><!-- /view-health -->
+
+  <!-- ================================================================ -->
+  <!-- VIEW 5: REAL-TIME COOLING SHELTERS & HYDRATION ROUTER            -->
+  <!-- ================================================================ -->
+  <div class="dashboard-view-page" id="view-shelters">
+    <section class="dashboard-section shelters-section" id="section-shelters">
+      <div class="section-header">
+        <div class="section-title-wrap">
+          <span class="section-tag">PUBLIC SANCTUARY NETWORK</span>
+          <h2 class="section-heading">Air-Conditioned Cooling Shelters &amp; Hydration Hubs</h2>
+        </div>
+        <button class="btn-action btn-find-closest-shelter" id="btn-find-closest-shelter">
+          <svg viewBox="0 0 24 24" width="14" height="14" stroke="currentColor" stroke-width="2" fill="none"><polygon points="3 11 22 2 13 21 11 13 3 11"/></svg>
+          <span>Locate Nearest Sanctuary</span>
+        </button>
+      </div>
+
+      <div class="shelters-grid" id="shelters-grid">
+        <div class="shelter-card skeleton-card">
+          <div class="shelter-card-top" style="display:flex; justify-content:space-between; align-items:flex-start;">
+            <div style="flex:1;">
+              <div class="skeleton-shimmer skeleton-text" style="width:68%; height:16px; margin-bottom:6px;"></div>
+              <div class="skeleton-shimmer skeleton-text" style="width:45%; height:11px;"></div>
+            </div>
+            <div class="skeleton-shimmer skeleton-pill" style="width:70px; height:18px;"></div>
+          </div>
+          <div class="skeleton-shimmer skeleton-text" style="width:85%; height:12px; margin:8px 0;"></div>
+          <div class="shelter-occ-row" style="display:flex; justify-content:space-between; margin-bottom:4px;">
+            <div class="skeleton-shimmer skeleton-text" style="width:40%; height:12px;"></div>
+            <div class="skeleton-shimmer skeleton-text" style="width:32px; height:12px;"></div>
+          </div>
+          <div class="shelter-occ-bar-wrap" style="height:6px; background:rgba(255,255,255,0.04); border-radius:3px; overflow:hidden;">
+            <div class="skeleton-shimmer" style="width:100%; height:100%;"></div>
+          </div>
+          <div class="shelter-amenities-tags" style="display:flex; gap:6px; margin-top:8px;">
+            <span class="skeleton-shimmer skeleton-pill" style="width:48px; height:18px;"></span>
+            <span class="skeleton-shimmer skeleton-pill" style="width:56px; height:18px;"></span>
+            <span class="skeleton-shimmer skeleton-pill" style="width:62px; height:18px;"></span>
+          </div>
+          <div class="skeleton-shimmer" style="width:100%; height:32px; border-radius:6px; margin-top:10px;"></div>
+        </div>
+        <div class="shelter-card skeleton-card">
+          <div class="shelter-card-top" style="display:flex; justify-content:space-between; align-items:flex-start;">
+            <div style="flex:1;">
+              <div class="skeleton-shimmer skeleton-text" style="width:62%; height:16px; margin-bottom:6px;"></div>
+              <div class="skeleton-shimmer skeleton-text" style="width:40%; height:11px;"></div>
+            </div>
+            <div class="skeleton-shimmer skeleton-pill" style="width:65px; height:18px;"></div>
+          </div>
+          <div class="skeleton-shimmer skeleton-text" style="width:80%; height:12px; margin:8px 0;"></div>
+          <div class="shelter-occ-row" style="display:flex; justify-content:space-between; margin-bottom:4px;">
+            <div class="skeleton-shimmer skeleton-text" style="width:45%; height:12px;"></div>
+            <div class="skeleton-shimmer skeleton-text" style="width:32px; height:12px;"></div>
+          </div>
+          <div class="shelter-occ-bar-wrap" style="height:6px; background:rgba(255,255,255,0.04); border-radius:3px; overflow:hidden;">
+            <div class="skeleton-shimmer" style="width:100%; height:100%;"></div>
+          </div>
+          <div class="shelter-amenities-tags" style="display:flex; gap:6px; margin-top:8px;">
+            <span class="skeleton-shimmer skeleton-pill" style="width:52px; height:18px;"></span>
+            <span class="skeleton-shimmer skeleton-pill" style="width:48px; height:18px;"></span>
+            <span class="skeleton-shimmer skeleton-pill" style="width:58px; height:18px;"></span>
+          </div>
+          <div class="skeleton-shimmer" style="width:100%; height:32px; border-radius:6px; margin-top:10px;"></div>
+        </div>
+        <div class="shelter-card skeleton-card">
+          <div class="shelter-card-top" style="display:flex; justify-content:space-between; align-items:flex-start;">
+            <div style="flex:1;">
+              <div class="skeleton-shimmer skeleton-text" style="width:75%; height:16px; margin-bottom:6px;"></div>
+              <div class="skeleton-shimmer skeleton-text" style="width:50%; height:11px;"></div>
+            </div>
+            <div class="skeleton-shimmer skeleton-pill" style="width:75px; height:18px;"></div>
+          </div>
+          <div class="skeleton-shimmer skeleton-text" style="width:88%; height:12px; margin:8px 0;"></div>
+          <div class="shelter-occ-row" style="display:flex; justify-content:space-between; margin-bottom:4px;">
+            <div class="skeleton-shimmer skeleton-text" style="width:38%; height:12px;"></div>
+            <div class="skeleton-shimmer skeleton-text" style="width:32px; height:12px;"></div>
+          </div>
+          <div class="shelter-occ-bar-wrap" style="height:6px; background:rgba(255,255,255,0.04); border-radius:3px; overflow:hidden;">
+            <div class="skeleton-shimmer" style="width:100%; height:100%;"></div>
+          </div>
+          <div class="shelter-amenities-tags" style="display:flex; gap:6px; margin-top:8px;">
+            <span class="skeleton-shimmer skeleton-pill" style="width:44px; height:18px;"></span>
+            <span class="skeleton-shimmer skeleton-pill" style="width:60px; height:18px;"></span>
+            <span class="skeleton-shimmer skeleton-pill" style="width:54px; height:18px;"></span>
+          </div>
+          <div class="skeleton-shimmer" style="width:100%; height:32px; border-radius:6px; margin-top:10px;"></div>
+        </div>
+      </div>
+    </section>
+  </div><!-- /view-shelters -->
+
+  <!-- ================================================================ -->
+  <!-- VIEW 6: GLOBAL RISK RADAR MAP                                    -->
+  <!-- ================================================================ -->
+  <div class="dashboard-view-page" id="view-map">
+    <section class="dashboard-section" id="section-map">
+      <div class="section-header">
+        <div class="section-title-wrap">
+          <h2 class="section-heading">Global Heat Risk Radar Map</h2>
+        </div>
+      </div>
+
+      <div class="map-command-layout">
+        <div class="map-viewport-box">
+          <div id="heat-map" class="heat-map"></div>
+          <div class="map-floating-legend">
+            <div class="m-legend-item"><span class="m-legend-dot" style="background:#10b981;"></span> Normal (&lt;27°)</div>
+            <div class="m-legend-item"><span class="m-legend-dot" style="background:#f59e0b;"></span> Caution (27-32°)</div>
+            <div class="m-legend-item"><span class="m-legend-dot" style="background:#f97316;"></span> Ex. Caution (32-41°)</div>
+            <div class="m-legend-item"><span class="m-legend-dot" style="background:#ef4444;"></span> Danger (41-54°)</div>
+            <div class="m-legend-item"><span class="m-legend-dot" style="background:#991b1b;"></span> Extreme (&gt;54°)</div>
+          </div>
+        </div>
+
+        <div class="map-city-sidebar bento-card">
+          <div class="sidebar-head">
+            <h4>Benchmark Stations</h4>
+            <span class="sidebar-count" id="city-count-badge">12 Active</span>
+          </div>
+          <div class="city-cards-list" id="city-cards-list">
+            <div class="city-sidebar-card skeleton-card" style="border-left: 3.5px solid rgba(255,255,255,0.08); display:flex; justify-content:space-between; align-items:center; padding:0.7rem 0.85rem;">
+              <div style="flex:1;">
+                <div class="skeleton-shimmer skeleton-text" style="width:65%; height:14px; margin-bottom:4px;"></div>
+                <div class="skeleton-shimmer skeleton-text" style="width:40%; height:11px;"></div>
+              </div>
+              <div class="city-sidebar-right" style="display:flex; flex-direction:column; align-items:flex-end;">
+                <div class="skeleton-shimmer skeleton-text" style="width:34px; height:16px; margin-bottom:4px;"></div>
+                <div class="skeleton-shimmer skeleton-pill" style="width:50px; height:14px;"></div>
+              </div>
+            </div>
+            <div class="city-sidebar-card skeleton-card" style="border-left: 3.5px solid rgba(255,255,255,0.08); display:flex; justify-content:space-between; align-items:center; padding:0.7rem 0.85rem;">
+              <div style="flex:1;">
+                <div class="skeleton-shimmer skeleton-text" style="width:55%; height:14px; margin-bottom:4px;"></div>
+                <div class="skeleton-shimmer skeleton-text" style="width:45%; height:11px;"></div>
+              </div>
+              <div class="city-sidebar-right" style="display:flex; flex-direction:column; align-items:flex-end;">
+                <div class="skeleton-shimmer skeleton-text" style="width:34px; height:16px; margin-bottom:4px;"></div>
+                <div class="skeleton-shimmer skeleton-pill" style="width:50px; height:14px;"></div>
+              </div>
+            </div>
+            <div class="city-sidebar-card skeleton-card" style="border-left: 3.5px solid rgba(255,255,255,0.08); display:flex; justify-content:space-between; align-items:center; padding:0.7rem 0.85rem;">
+              <div style="flex:1;">
+                <div class="skeleton-shimmer skeleton-text" style="width:70%; height:14px; margin-bottom:4px;"></div>
+                <div class="skeleton-shimmer skeleton-text" style="width:35%; height:11px;"></div>
+              </div>
+              <div class="city-sidebar-right" style="display:flex; flex-direction:column; align-items:flex-end;">
+                <div class="skeleton-shimmer skeleton-text" style="width:34px; height:16px; margin-bottom:4px;"></div>
+                <div class="skeleton-shimmer skeleton-pill" style="width:50px; height:14px;"></div>
+              </div>
+            </div>
+            <div class="city-sidebar-card skeleton-card" style="border-left: 3.5px solid rgba(255,255,255,0.08); display:flex; justify-content:space-between; align-items:center; padding:0.7rem 0.85rem;">
+              <div style="flex:1;">
+                <div class="skeleton-shimmer skeleton-text" style="width:60%; height:14px; margin-bottom:4px;"></div>
+                <div class="skeleton-shimmer skeleton-text" style="width:42%; height:11px;"></div>
+              </div>
+              <div class="city-sidebar-right" style="display:flex; flex-direction:column; align-items:flex-end;">
+                <div class="skeleton-shimmer skeleton-text" style="width:34px; height:16px; margin-bottom:4px;"></div>
+                <div class="skeleton-shimmer skeleton-pill" style="width:50px; height:14px;"></div>
+              </div>
+            </div>
+          </div>
+        </div>
+      </div>
+    </section>
+  </div><!-- /view-map -->
+
+  <!-- ================================================================ -->
+  <!-- VIEW 8: EPIDEMIOLOGICAL SURGE FORECAST (OFFICIAL)                -->
+  <!-- ================================================================ -->
+  <div class="dashboard-view-page admin-only" id="view-epi">
+    <section class="dashboard-section epi-section admin-only" id="epi-section">
+      <div class="section-header">
+        <div class="section-title-wrap">
+          <span class="section-tag">EPIDEMIOLOGICAL MODEL</span>
+          <h2 class="section-heading">Heat-Induced Mortality &amp; Hospitalization Surge Forecast</h2>
+        </div>
+      </div>
+
+      <div class="epi-overview-grid">
+
+        <div class="bento-card epi-mri-card" id="epi-mri-card">
+          <div class="epi-hvi-label">Mortality Risk Index (MRI)</div>
+          <div class="epi-hvi-score tabular-num" id="epi-mri-score">—</div>
+          <div class="epi-hvi-tier" id="epi-mri-tier">Loading...</div>
+          <div class="bento-track"><div class="bento-bar" id="epi-mri-bar"></div></div>
+          <div class="epi-hvi-desc" id="epi-mri-desc">Calculating composite risk index...</div>
+        </div>
+
+        <div class="bento-card epi-hvi-card" id="epi-hvi-card">
+          <div class="epi-hvi-label">Heat Vulnerability Index (HVI)</div>
+          <div class="epi-hvi-score tabular-num" id="epi-hvi-score">—</div>
+          <div class="epi-hvi-tier" id="epi-hvi-tier">Loading...</div>
+          <div class="bento-track"><div class="bento-bar" id="epi-hvi-bar"></div></div>
+          <div class="epi-hvi-desc" id="epi-hvi-desc">Fetching demographic vulnerability analysis...</div>
+        </div>
+
+        <div class="bento-card epi-demog-card">
+          <h3 class="panel-card-title">Demographic Vulnerability Factors</h3>
+          <div class="epi-demog-grid">
+            <div class="epi-demog-item"><div class="epi-demog-label">Elderly (65+)</div><div class="epi-demog-val tabular-num" id="epi-demog-elderly">—</div></div>
+            <div class="epi-demog-item"><div class="epi-demog-label">Outdoor Workers</div><div class="epi-demog-val tabular-num" id="epi-demog-outdoor">—</div></div>
+            <div class="epi-demog-item"><div class="epi-demog-label">Slum / No-AC Density</div><div class="epi-demog-val tabular-num" id="epi-demog-slum">—</div></div>
+            <div class="epi-demog-item"><div class="epi-demog-label">Chronic Morbidity</div><div class="epi-demog-val tabular-num" id="epi-demog-morbidity">—</div></div>
+          </div>
+        </div>
+
+        <div class="bento-card epi-peak-card">
+          <h3 class="panel-card-title">Peak 3–5 Day Surge Projection</h3>
+          <div class="epi-peak-stat tabular-num" id="epi-peak-mortality">—</div>
+          <div class="epi-peak-label">Projected Excess Mortality (%)</div>
+          <div class="epi-peak-stat epi-hosp-stat tabular-num" id="epi-peak-hosp">—</div>
+          <div class="epi-peak-label">Hospitalization Surge (%)</div>
+          <div class="epi-admissions-row">
+            <div class="epi-adm-box" id="epi-adm-cardiac"><div class="epi-adm-val tabular-num" id="epi-adm-cardiac-val">—</div><div class="epi-adm-lbl">Cardiovascular</div></div>
+            <div class="epi-adm-box" id="epi-adm-resp"><div class="epi-adm-val tabular-num" id="epi-adm-resp-val">—</div><div class="epi-adm-lbl">Respiratory</div></div>
+            <div class="epi-adm-box" id="epi-adm-heat"><div class="epi-adm-val tabular-num" id="epi-adm-heat-val">—</div><div class="epi-adm-lbl">Heatstroke</div></div>
+          </div>
+        </div>
+      </div>
+
+      <div class="bento-card epi-chart-card">
+        <div class="epi-chart-header">
+          <h3 class="panel-card-title">7-Day Projected Excess Admissions &amp; Mortality Trajectory</h3>
+          <div class="epi-chart-legend">
+            <span class="epi-legend-dot" style="background:#ef4444;"></span> Excess Admissions (%)
+            <span class="epi-legend-dot" style="background:#f97316;"></span> Excess Mortality (%)
+          </div>
+        </div>
+        <div class="epi-chart-wrap"><canvas id="epi-surge-chart"></canvas></div>
+      </div>
+
+      <div class="bento-card epi-advisory-card">
+        <h3 class="panel-card-title">Automated Public Health Directives</h3>
+        <div class="epi-advisories-list" id="epi-advisories-list">
+          <div class="skeleton-row" style="padding:0.85rem; border-left:3px solid rgba(255,255,255,0.08); margin-bottom:8px;">
+            <div style="flex:1;">
+              <div class="skeleton-shimmer skeleton-text" style="width:65%; height:14px; margin-bottom:5px;"></div>
+              <div class="skeleton-shimmer skeleton-text" style="width:88%; height:11px;"></div>
+            </div>
+            <div class="skeleton-shimmer skeleton-pill" style="width:70px; height:18px;"></div>
+          </div>
+          <div class="skeleton-row" style="padding:0.85rem; border-left:3px solid rgba(255,255,255,0.08); margin-bottom:8px;">
+            <div style="flex:1;">
+              <div class="skeleton-shimmer skeleton-text" style="width:58%; height:14px; margin-bottom:5px;"></div>
+              <div class="skeleton-shimmer skeleton-text" style="width:80%; height:11px;"></div>
+            </div>
+            <div class="skeleton-shimmer skeleton-pill" style="width:60px; height:18px;"></div>
+          </div>
+          <div class="skeleton-row" style="padding:0.85rem; border-left:3px solid rgba(255,255,255,0.08);">
+            <div style="flex:1;">
+              <div class="skeleton-shimmer skeleton-text" style="width:72%; height:14px; margin-bottom:5px;"></div>
+              <div class="skeleton-shimmer skeleton-text" style="width:85%; height:11px;"></div>
+            </div>
+            <div class="skeleton-shimmer skeleton-pill" style="width:65px; height:18px;"></div>
+          </div>
+        </div>
+      </div>
+    </section>
+  </div><!-- /view-epi -->
+
+  <!-- ================================================================ -->
+  <!-- VIEW 7: HYPER-LOCAL WARD GIS CHLOROPLETH MAP (OFFICIAL)          -->
+  <!-- ================================================================ -->
+  <div class="dashboard-view-page admin-only" id="view-ward">
+    <section class="dashboard-section ward-section admin-only" id="ward-section">
+      <div class="section-header">
+        <div class="section-title-wrap">
+          <span class="section-tag">HYPER-LOCAL GIS</span>
+          <h2 class="section-heading"><span id="ward-city-heading">Delhi NCR</span> Zone / Ward Heat Vulnerability Chloropleth</h2>
+        </div>
+      </div>
+
+      <div class="ward-layout">
+        <div class="ward-map-column">
+          <div class="ward-layer-tabs">
+            <button class="ward-layer-btn active" data-layer="heat" id="ward-layer-heat">Thermal Heat Index</button>
+            <button class="ward-layer-btn" data-layer="hvi" id="ward-layer-hvi">HVI Vulnerability</button>
+            <button class="ward-layer-btn" data-layer="hospital" id="ward-layer-hospital">Hospital Bed Load</button>
+          </div>
+          <div class="ward-map-frame">
+            <div id="ward-map" class="ward-map"></div>
+            <div class="ward-legend-float">
+              <div class="ward-legend-title" id="ward-legend-title">Heat Index (°C)</div>
+              <div class="ward-legend-items">
+                <div class="w-leg-row"><span class="w-leg-sq" style="background:#10b981;"></span> Normal Range</div>
+                <div class="w-leg-row"><span class="w-leg-sq" style="background:#f59e0b;"></span> Heat Watch</div>
+                <div class="w-leg-row"><span class="w-leg-sq" style="background:#f97316;"></span> Heat Warning</div>
+                <div class="w-leg-row"><span class="w-leg-sq" style="background:#ef4444;"></span> High Danger</div>
+                <div class="w-leg-row"><span class="w-leg-sq" style="background:#991b1b;"></span> Critical Emergency</div>
+              </div>
+            </div>
+          </div>
+        </div>
+
+        <div class="ward-sidebar">
+          <div class="ward-list-panel bento-card">
+            <div class="ward-panel-head">
+              <span id="ward-list-title">Administrative Wards</span>
+              <span class="ward-count-badge" id="ward-high-count">—</span>
+            </div>
+            <div class="ward-list" id="ward-list">
+              <div class="skeleton-row" style="padding:0.75rem 0.85rem; border-left:3px solid rgba(255,255,255,0.08); margin-bottom:6px;">
+                <div style="flex:1;">
+                  <div class="skeleton-shimmer skeleton-text" style="width:65%; height:13px; margin-bottom:4px;"></div>
+                  <div class="skeleton-shimmer skeleton-text" style="width:40%; height:10px;"></div>
+                </div>
+                <div class="skeleton-shimmer skeleton-pill" style="width:55px; height:16px;"></div>
+              </div>
+              <div class="skeleton-row" style="padding:0.75rem 0.85rem; border-left:3px solid rgba(255,255,255,0.08); margin-bottom:6px;">
+                <div style="flex:1;">
+                  <div class="skeleton-shimmer skeleton-text" style="width:58%; height:13px; margin-bottom:4px;"></div>
+                  <div class="skeleton-shimmer skeleton-text" style="width:44%; height:10px;"></div>
+                </div>
+                <div class="skeleton-shimmer skeleton-pill" style="width:55px; height:16px;"></div>
+              </div>
+              <div class="skeleton-row" style="padding:0.75rem 0.85rem; border-left:3px solid rgba(255,255,255,0.08); margin-bottom:6px;">
+                <div style="flex:1;">
+                  <div class="skeleton-shimmer skeleton-text" style="width:70%; height:13px; margin-bottom:4px;"></div>
+                  <div class="skeleton-shimmer skeleton-text" style="width:38%; height:10px;"></div>
+                </div>
+                <div class="skeleton-shimmer skeleton-pill" style="width:55px; height:16px;"></div>
+              </div>
+              <div class="skeleton-row" style="padding:0.75rem 0.85rem; border-left:3px solid rgba(255,255,255,0.08);">
+                <div style="flex:1;">
+                  <div class="skeleton-shimmer skeleton-text" style="width:50%; height:13px; margin-bottom:4px;"></div>
+                  <div class="skeleton-shimmer skeleton-text" style="width:42%; height:10px;"></div>
+                </div>
+                <div class="skeleton-shimmer skeleton-pill" style="width:55px; height:16px;"></div>
+              </div>
+            </div>
+          </div>
+
+          <div class="ward-detail-drawer bento-card" id="ward-detail-drawer" style="display:none;">
+            <div class="ward-drawer-header">
+              <div>
+                <div class="ward-drawer-name" id="ward-detail-name">—</div>
+                <div class="ward-drawer-district" id="ward-detail-district">—</div>
+              </div>
+              <div class="ward-risk-pill" id="ward-detail-risk-pill">—</div>
+            </div>
+
+            <div class="ward-drawer-metrics">
+              <div class="w-metric"><div class="w-metric-val tabular-num" id="ward-adj-temp">—</div><div class="w-metric-lbl">UHI Temp</div></div>
+              <div class="w-metric"><div class="w-metric-val tabular-num" id="ward-adj-hi">—</div><div class="w-metric-lbl">Heat Index</div></div>
+              <div class="w-metric"><div class="w-metric-val tabular-num" id="ward-hvi">—</div><div class="w-metric-lbl">HVI Score</div></div>
+              <div class="w-metric"><div class="w-metric-val tabular-num" id="ward-mortality-pct">—</div><div class="w-metric-lbl">Mortality +%</div></div>
+            </div>
+
+            <div class="ward-drawer-section">
+              <div class="ward-drawer-label">Hospital Surge Status</div>
+              <div class="ward-hosp-row"><span id="ward-hosp-beds">—</span> emergency beds • <span id="ward-hosp-load" class="ward-hosp-load">—% projected load</span></div>
+              <div class="bento-track"><div class="bento-bar bar-amber" id="ward-hosp-bar"></div></div>
+            </div>
+
+            <div class="ward-drawer-section">
+              <div class="ward-drawer-label">Designated Cooling Shelters</div>
+              <div class="ward-cooling-list" id="ward-cooling-list"></div>
+            </div>
+
+            <div class="ward-drawer-section">
+              <div class="ward-drawer-label">Power Distribution Grid</div>
+              <div class="ward-power-status" id="ward-power-status">—</div>
+            </div>
+
+            <div class="ward-drawer-section">
+              <div class="ward-drawer-label">Zone Population</div>
+              <div id="ward-population">—</div>
+            </div>
+          </div>
+        </div>
+      </div>
+    </section>
+  </div><!-- /view-ward -->
+
+  <!-- ================================================================ -->
+  <!-- VIEW 9: MUNICIPAL HEAT ACTION PLAN (HAP) DIRECTIVES (OFFICIAL)   -->
+  <!-- ================================================================ -->
+  <div class="dashboard-view-page admin-only" id="view-hap">
+    <section class="dashboard-section hap-section admin-only" id="hap-section">
+      <div class="section-header">
+        <div class="section-title-wrap">
+          <span class="section-tag">MUNICIPAL COMMAND</span>
+          <h2 class="section-heading">Municipal Heat Action Plan (HAP) Directives</h2>
+        </div>
+      </div>
+
+      <div class="hap-alert-banner bento-card" id="hap-alert-banner">
+        <div class="hap-level-indicator" id="hap-level-indicator">
+          <div class="hap-level-number tabular-num" id="hap-level-num">—</div>
+          <div class="hap-level-label" id="hap-level-label">Evaluating protocol thresholds...</div>
+        </div>
+        <div class="hap-indices-row">
+          <div class="hap-idx-pill">HI: <b id="hap-hi-val" class="tabular-num">—°</b></div>
+          <div class="hap-idx-pill">WBGT: <b id="hap-wbgt-val" class="tabular-num">—°</b></div>
+          <div class="hap-idx-pill">Wet-Bulb: <b id="hap-wb-val" class="tabular-num">—°</b></div>
+          <div class="hap-idx-pill">Grid Surge: <b id="hap-power-val" class="tabular-num">— MW</b></div>
+        </div>
+      </div>
+
+      <div class="hap-protocols-grid" id="hap-protocols-grid">
+        <div class="hap-sector-card skeleton-card">
+          <div class="hap-sector-head" style="display:flex; justify-content:space-between; align-items:center;">
+            <div class="skeleton-shimmer skeleton-text" style="width:55%; height:15px;"></div>
+            <div class="skeleton-shimmer skeleton-pill" style="width:70px; height:18px;"></div>
+          </div>
+          <div class="skeleton-shimmer skeleton-text" style="width:90%; height:12px; margin:8px 0 4px;"></div>
+          <div class="skeleton-shimmer skeleton-text" style="width:75%; height:12px; margin-bottom:12px;"></div>
+          <div class="hap-action-items">
+            <div class="skeleton-row" style="margin-bottom:6px;"><div class="skeleton-shimmer skeleton-circle" style="width:14px; height:14px;"></div><div class="skeleton-shimmer skeleton-text" style="width:85%; height:11px;"></div></div>
+            <div class="skeleton-row"><div class="skeleton-shimmer skeleton-circle" style="width:14px; height:14px;"></div><div class="skeleton-shimmer skeleton-text" style="width:70%; height:11px;"></div></div>
+          </div>
+        </div>
+        <div class="hap-sector-card skeleton-card">
+          <div class="hap-sector-head" style="display:flex; justify-content:space-between; align-items:center;">
+            <div class="skeleton-shimmer skeleton-text" style="width:60%; height:15px;"></div>
+            <div class="skeleton-shimmer skeleton-pill" style="width:65px; height:18px;"></div>
+          </div>
+          <div class="skeleton-shimmer skeleton-text" style="width:85%; height:12px; margin:8px 0 4px;"></div>
+          <div class="skeleton-shimmer skeleton-text" style="width:70%; height:12px; margin-bottom:12px;"></div>
+          <div class="hap-action-items">
+            <div class="skeleton-row" style="margin-bottom:6px;"><div class="skeleton-shimmer skeleton-circle" style="width:14px; height:14px;"></div><div class="skeleton-shimmer skeleton-text" style="width:80%; height:11px;"></div></div>
+            <div class="skeleton-row"><div class="skeleton-shimmer skeleton-circle" style="width:14px; height:14px;"></div><div class="skeleton-shimmer skeleton-text" style="width:75%; height:11px;"></div></div>
+          </div>
+        </div>
+        <div class="hap-sector-card skeleton-card">
+          <div class="hap-sector-head" style="display:flex; justify-content:space-between; align-items:center;">
+            <div class="skeleton-shimmer skeleton-text" style="width:50%; height:15px;"></div>
+            <div class="skeleton-shimmer skeleton-pill" style="width:75px; height:18px;"></div>
+          </div>
+          <div class="skeleton-shimmer skeleton-text" style="width:88%; height:12px; margin:8px 0 4px;"></div>
+          <div class="skeleton-shimmer skeleton-text" style="width:65%; height:12px; margin-bottom:12px;"></div>
+          <div class="hap-action-items">
+            <div class="skeleton-row" style="margin-bottom:6px;"><div class="skeleton-shimmer skeleton-circle" style="width:14px; height:14px;"></div><div class="skeleton-shimmer skeleton-text" style="width:90%; height:11px;"></div></div>
+            <div class="skeleton-row"><div class="skeleton-shimmer skeleton-circle" style="width:14px; height:14px;"></div><div class="skeleton-shimmer skeleton-text" style="width:68%; height:11px;"></div></div>
+          </div>
+        </div>
+        <div class="hap-sector-card skeleton-card">
+          <div class="hap-sector-head" style="display:flex; justify-content:space-between; align-items:center;">
+            <div class="skeleton-shimmer skeleton-text" style="width:58%; height:15px;"></div>
+            <div class="skeleton-shimmer skeleton-pill" style="width:68px; height:18px;"></div>
+          </div>
+          <div class="skeleton-shimmer skeleton-text" style="width:82%; height:12px; margin:8px 0 4px;"></div>
+          <div class="skeleton-shimmer skeleton-text" style="width:72%; height:12px; margin-bottom:12px;"></div>
+          <div class="hap-action-items">
+            <div class="skeleton-row" style="margin-bottom:6px;"><div class="skeleton-shimmer skeleton-circle" style="width:14px; height:14px;"></div><div class="skeleton-shimmer skeleton-text" style="width:78%; height:11px;"></div></div>
+            <div class="skeleton-row"><div class="skeleton-shimmer skeleton-circle" style="width:14px; height:14px;"></div><div class="skeleton-shimmer skeleton-text" style="width:82%; height:11px;"></div></div>
+          </div>
+        </div>
+      </div>
+    </section>
+  </div><!-- /view-hap -->
+
+  <!-- ================================================================ -->
+  <!-- VIEW 10: AUTOMATED ALERT BROADCAST DISPATCH CONSOLE (OFFICIAL)   -->
+  <!-- ================================================================ -->
+  <div class="dashboard-view-page admin-only" id="view-dispatch">
+    <section class="dashboard-section dispatch-section admin-only" id="dispatch-section">
+      <div class="section-header">
+        <div class="section-title-wrap">
+          <span class="section-tag">TELECOM &amp; CIVIL DEFENSE</span>
+          <h2 class="section-heading">National Emergency Alert &amp; Multi-Channel Broadcast Gateway</h2>
+          <p class="section-subtext">Direct high-priority biometeorological directives, curfew mandates, and life-saving heat safety instructions across cellular networks, WhatsApp, and emergency handsets.</p>
+        </div>
+        <div class="dispatch-header-status-group">
+          <div class="dispatch-telecom-badge">
+            <span class="pulse-indicator-green"></span>
+            <span id="gateway-status-label">Carrier Push Gateway Active</span>
+          </div>
+          <div class="dispatch-telecom-stat">
+            <span class="text-muted">Hop Latency:</span>
+            <span class="tabular-num text-accent font-bold" id="gateway-latency-stat">26ms</span>
+          </div>
+          <div class="dispatch-telecom-stat">
+            <span class="text-muted">Civil Coverage:</span>
+            <span class="tabular-num text-green font-bold">32.9M Citizens</span>
+          </div>
+        </div>
+      </div>
+
+      <!-- Real-Time Scope Metric Bar -->
+      <div class="dispatch-kpi-row">
+        <div class="dispatch-kpi-card bento-card">
+          <div class="dispatch-kpi-label">Target Geo-Fence</div>
+          <div class="dispatch-kpi-val" id="kpi-target-zone">All Delhi NCR</div>
+          <div class="dispatch-kpi-sub" id="kpi-target-temp">Air: 42.8°C | Heat Index: 49.5°C</div>
+        </div>
+        <div class="dispatch-kpi-card bento-card">
+          <div class="dispatch-kpi-label">Audience Population</div>
+          <div class="dispatch-kpi-val tabular-num" id="kpi-target-audience-count">21,400,000</div>
+          <div class="dispatch-kpi-sub" id="kpi-target-audience-name">General Public Cohort</div>
+        </div>
+        <div class="dispatch-kpi-card bento-card">
+          <div class="dispatch-kpi-label">Gateway Cost Estimate</div>
+          <div class="dispatch-kpi-val tabular-num text-orange" id="kpi-target-cost">₹2,461,000</div>
+          <div class="dispatch-kpi-sub" id="kpi-cost-breakdown">1 SMS Segment • ₹0.115/unit</div>
+        </div>
+        <div class="dispatch-kpi-card bento-card">
+          <div class="dispatch-kpi-label">Carrier Delivery SLA</div>
+          <div class="dispatch-kpi-val tabular-num text-green" id="kpi-delivery-sla">99.4%</div>
+          <div class="dispatch-kpi-sub">C-DOT CAP &amp; GSM Mesh Verified</div>
+        </div>
+      </div>
+
+      <div class="dispatch-layout">
+        <!-- Left: Broadcast Composer & Direct Delivery Controller -->
+        <div class="dispatch-composer bento-card">
+          <div class="dispatch-composer-topbar">
+            <h3 class="panel-card-title">Emergency Broadcast Dispatcher</h3>
+            
+            <!-- Dispatch Mode Toggle -->
+            <div class="dispatch-mode-toggle" id="dispatch-mode-toggle">
+              <button class="dispatch-mode-btn active" data-mode="ward_broadcast" id="mode-ward-btn">
+                🌐 Ward Broadcast (Bulk)
+              </button>
+              <button class="dispatch-mode-btn" data-mode="direct_test" id="mode-direct-btn">
+                📱 Direct Handset Test
+              </button>
+            </div>
+          </div>
+
+          <!-- Direct Handset Input (Visible in Direct Mode or Optional) -->
+          <div class="dispatch-form-group" id="dispatch-direct-handset-group" style="display:none;">
+            <div class="dispatch-label-row">
+              <label class="dispatch-label" for="dispatch-target-phone">Target Phone Handset (Real SMS / WhatsApp Delivery)</label>
+              <span class="dispatch-badge-pill pill-accent">Live Carrier Handshake</span>
+            </div>
+            <div class="dispatch-phone-input-row">
+              <input type="tel" id="dispatch-target-phone" class="dispatch-input" placeholder="+91 98765 43210 (Enter your mobile number)" value="+91 98765 43210">
+              <button type="button" class="dispatch-quick-phone-btn" id="btn-set-my-phone" title="Pre-fill sample verified handset">Verify</button>
+            </div>
+            <span class="dispatch-field-hint">Enter your phone number in E.164 format (+91...) to receive actual live test alerts directly on your personal device.</span>
+          </div>
+
+          <!-- Channel Selection -->
+          <div class="dispatch-form-group">
+            <label class="dispatch-label">Primary Transmission Channel</label>
+            <div class="dispatch-channel-toggle">
+              <button class="dispatch-channel-btn active" data-channel="SMS" id="dispatch-sms-btn">
+                <span class="channel-icon">📱</span>
+                <span class="channel-name">SMS Push Relay</span>
+                <span class="channel-sub">GSM-7 Bulk</span>
+              </button>
+              <button class="dispatch-channel-btn" data-channel="WhatsApp" id="dispatch-wa-btn">
+                <span class="channel-icon">💬</span>
+                <span class="channel-name">WhatsApp API</span>
+                <span class="channel-sub">Verified Meta Cloud</span>
+              </button>
+              <button class="dispatch-channel-btn" data-channel="WebPush" id="dispatch-webpush-btn">
+                <span class="channel-icon">🔔</span>
+                <span class="channel-name">Web Push</span>
+                <span class="channel-sub">Instant Desktop/PWA</span>
+              </button>
+              <button class="dispatch-channel-btn" data-channel="Siren" id="dispatch-siren-btn-chan">
+                <span class="channel-icon">📢</span>
+                <span class="channel-name">Public Siren</span>
+                <span class="channel-sub">Municipal PA Tone</span>
+              </button>
+            </div>
+          </div>
+
+          <!-- Target Geo-Fence / Ward -->
+          <div class="dispatch-form-row">
+            <div class="dispatch-form-group flex-1" id="dispatch-zone-group">
+              <label class="dispatch-label" for="dispatch-zone">Target Municipal Geo-Fence</label>
+              <select class="dispatch-select" id="dispatch-zone">
+                <option value="all">All Delhi NCR (Pan-City Grid • 32.9M pop)</option>
+                <option value="ward-1">Ward 1: Connaught Place &amp; Central Corridor (380K pop)</option>
+                <option value="ward-2" selected>Ward 2: Shahdara North &amp; Seelampur (Extreme Heat Hazard • 620K pop)</option>
+                <option value="ward-3">Ward 3: Rohini Sector 15 &amp; 16 (510K pop)</option>
+                <option value="ward-4">Ward 4: Dwarka Sector 10 &amp; 12 (440K pop)</option>
+                <option value="ward-5">Ward 5: Okhla Industrial Phase III (High Labor Density • 580K pop)</option>
+              </select>
+            </div>
+
+            <div class="dispatch-form-group flex-1">
+              <label class="dispatch-label" for="dispatch-audience">Vulnerable Audience Cohort</label>
+              <select class="dispatch-select" id="dispatch-audience">
+                <option value="Outdoor Workers">Outdoor Workers &amp; Labor Unions (148,800)</option>
+                <option value="General Public">General Public (403,000)</option>
+                <option value="Elderly Residents (65+)">Elderly Residents 65+ (48,600)</option>
+                <option value="Slum &amp; Informal Settlements">Slum &amp; Informal Settlements (136,400)</option>
+                <option value="Healthcare Workers">Healthcare Network &amp; A&amp;E Staff (6,200)</option>
+                <option value="School Authorities">School Authorities &amp; Transport (4,100)</option>
+                <option value="City Administration">City Administration &amp; SDM Offices (1,800)</option>
+                <option value="DISCOM Engineers">DISCOM Power Grid Engineers (650)</option>
+              </select>
+            </div>
+          </div>
+
+          <!-- Severity Level Row -->
+          <div class="dispatch-form-group">
+            <div class="dispatch-label-row">
+              <label class="dispatch-label">NDMA Severity Tier &amp; Alert Protocol</label>
+              <span class="dispatch-badge-pill" id="tier-badge-label" style="background:#f97316; color:#fff;">L4 Alert: Severe Hazard</span>
+            </div>
+            <div class="dispatch-tier-row">
+              <button class="dispatch-tier-btn" data-tier="1">L1 Normal</button>
+              <button class="dispatch-tier-btn" data-tier="2">L2 Watch</button>
+              <button class="dispatch-tier-btn" data-tier="3">L3 Warning</button>
+              <button class="dispatch-tier-btn active" data-tier="4">L4 Alert</button>
+              <button class="dispatch-tier-btn" data-tier="5">L5 Critical</button>
+            </div>
+          </div>
+
+          <!-- AI & Multilingual Directive Composer -->
+          <div class="dispatch-form-group">
+            <div class="dispatch-composer-header">
+              <div class="dispatch-lang-tabs" id="dispatch-lang-tabs">
+                <button class="dispatch-lang-btn active" data-lang="en">English</button>
+                <button class="dispatch-lang-btn" data-lang="hi">हिन्दी (Hindi)</button>
+                <button class="dispatch-lang-btn" data-lang="bn">বাংলা (Bengali)</button>
+                <button class="dispatch-lang-btn" data-lang="ur">اردو (Urdu)</button>
+              </div>
+              <button type="button" class="dispatch-ai-btn" id="btn-ai-compose">
+                <span class="ai-sparkle">✨</span>
+                <span>Draft with Gemini AI</span>
+              </button>
+            </div>
+
+            <!-- Dynamic Variable Chips -->
+            <div class="dispatch-var-chips">
+              <span class="var-chip-label">Insert Dynamic Telemetry:</span>
+              <button type="button" class="var-chip" data-var="{TEMP}">+ {TEMP}</button>
+              <button type="button" class="var-chip" data-var="{HEAT_INDEX}">+ {HEAT_INDEX}</button>
+              <button type="button" class="var-chip" data-var="{ZONE}">+ {ZONE}</button>
+              <button type="button" class="var-chip" data-var="{SHELTER}">+ {SHELTER}</button>
+              <button type="button" class="var-chip" data-var="{CURFEW}">+ {CURFEW}</button>
+              <button type="button" class="var-chip" data-var="{HELPLINE}">+ {HELPLINE}</button>
+            </div>
+
+            <textarea id="dispatch-message" class="dispatch-textarea" rows="4" placeholder="Enter emergency broadcast directive payload..."></textarea>
+            
+            <div class="dispatch-meta-bar">
+              <div class="dispatch-char-count tabular-num" id="dispatch-char-count">
+                <span id="char-current">0</span> / <span id="char-max">160</span> chars 
+                (<span id="segment-count">1 SMS Segment</span> • <span id="encoding-type">GSM-7</span>)
+              </div>
+              <div class="dispatch-cost-estimate tabular-num" id="dispatch-cost-estimate">
+                Est. Gateway Charge: ₹17,112
+              </div>
+            </div>
+          </div>
+
+          <!-- Official Standard Templates -->
+          <div class="dispatch-form-group">
+            <label class="dispatch-label">Standard Operating Procedure (SOP) Templates</label>
+            <div class="dispatch-templates">
+              <button class="dispatch-tpl-btn" data-tpl="curfew">⚠️ Mandatory Labor Curfew (11AM-4PM)</button>
+              <button class="dispatch-tpl-btn" data-tpl="cooling">💧 Cooling Shelters &amp; Free ORS</button>
+              <button class="dispatch-tpl-btn" data-tpl="elderly">👵 Senior Citizen Wellness Check</button>
+              <button class="dispatch-tpl-btn" data-tpl="schools">🏫 School Early Closure Order</button>
+              <button class="dispatch-tpl-btn" data-tpl="power">⚡ Grid Peak Load Shedding Notice</button>
+            </div>
+          </div>
+
+          <!-- Dispatch Execution Bar -->
+          <div class="dispatch-actions-bar">
+            <button class="dispatch-send-btn" id="dispatch-send-btn">
+              <span class="dispatch-btn-icon">🚨</span>
+              <span class="dispatch-btn-text">TRANSMIT EMERGENCY BROADCAST</span>
+            </button>
+            <button type="button" class="dispatch-siren-test-btn" id="dispatch-siren-test-btn" title="Simulate municipal civil defense acoustic alarm">
+              <span class="siren-icon">🔊</span>
+              <span>Acoustic Siren</span>
+            </button>
+            <button type="button" class="dispatch-clear-btn" id="dispatch-clear-btn" title="Clear message payload">
+              <span>🧹 Clear</span>
+            </button>
+          </div>
+        </div>
+
+        <!-- Right Column: Device Simulator & Live Gateway Handshake Monitor -->
+        <div class="dispatch-right-col">
+          <!-- Device Preview Shell -->
+          <div class="phone-preview-wrap">
+            <div class="phone-sim-toolbar">
+              <span class="phone-sim-title">Live Receiver Simulator</span>
+              <div class="phone-device-toggle">
+                <button class="phone-type-btn active" data-device="smartphone" id="btn-device-smartphone">📱 Smartphone</button>
+                <button class="phone-type-btn" data-device="featurephone" id="btn-device-featurephone">📟 Feature Phone</button>
+              </div>
+            </div>
+
+            <!-- Smartphone Shell -->
+            <div class="phone-shell" id="phone-shell-modern">
+              <div class="phone-notch"></div>
+              <div class="phone-screen">
+                <div class="phone-status-bar">
+                  <span class="tabular-num" id="phone-clock">12:30</span>
+                  <span class="phone-status-icons">
+                    <span>Airtel 5G</span>
+                    <span class="signal-bars">■■■■</span>
+                    <span>100%</span>
+                  </span>
+                </div>
+                <div class="phone-app-header" id="phone-app-header">
+                  <span class="phone-sender-avatar">🏛️</span>
+                  <div class="phone-sender-meta">
+                    <span class="phone-channel-label" id="phone-channel-label">National Disaster Authority (NDMA)</span>
+                    <span class="phone-verified-tag">✓ Verified Government Channel</span>
+                  </div>
+                </div>
+                <div class="phone-messages-area">
+                  <div class="phone-bubble phone-bubble-system" id="phone-preview-msg">
+                    <div class="phone-alert-badge" id="phone-alert-badge">LEVEL 4 DISASTER ALERT</div>
+                    <div class="phone-msg-text" id="phone-msg-text">🚨 IMD RED ALERT: Extreme Heat Index 50°C in Shahdara North. Mandatory outdoor labor stoppage 11AM-4PM. Municipal cooling centers open. Dial 108 for heat stroke emergency.</div>
+                    <div class="phone-msg-time" id="phone-msg-time">Just now • Cell Broadcast CAP-ID #8821</div>
+                    <div class="phone-action-pills">
+                      <button type="button" class="phone-pill-btn" onclick="window.location.href='tel:108'">📞 Call 108 EMS</button>
+                      <button type="button" class="phone-pill-btn" id="phone-btn-shelter">📍 Cooling Center</button>
+                      <button type="button" class="phone-pill-btn" id="phone-btn-ors">💧 ORS Protocol</button>
+                    </div>
+                  </div>
+                </div>
+              </div>
+            </div>
+
+            <!-- Feature Phone Retro Shell (Hidden by default) -->
+            <div class="feature-phone-shell" id="phone-shell-feature" style="display:none;">
+              <div class="fp-screen">
+                <div class="fp-header">SMS (1/1) - GOVT-NDMA</div>
+                <div class="fp-body" id="feature-phone-text">
+                  🚨 IMD RED ALERT: Extreme Heat Index 50C in Shahdara North. Mandatory work stoppage 11AM-4PM. Cooling centers open. Dial 108.
+                </div>
+                <div class="fp-footer">Options &nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp; Back</div>
+              </div>
+              <div class="fp-keypad">
+                <div class="fp-dpad">▲</div>
+                <div class="fp-keys">1 2 3 • 4 5 6 • 7 8 9 • * 0 #</div>
+              </div>
+            </div>
+          </div>
+
+          <!-- Real-Time Transmission Result Receipt Card -->
+          <div class="dispatch-result-card bento-card" id="dispatch-result-card" style="display:none;">
+            <div class="dispatch-result-top">
+              <span class="result-check-icon">✓</span>
+              <div>
+                <div class="dispatch-result-title">Broadcast Dispatched Successfully</div>
+                <div class="dispatch-result-timestamp text-muted" id="res-timestamp">—</div>
+              </div>
+            </div>
+            
+            <div class="dispatch-result-grid">
+              <div class="dispatch-result-item">
+                <span class="res-label">Dispatch ID:</span>
+                <b id="res-dispatch-id" class="tabular-num text-accent">—</b>
+              </div>
+              <div class="dispatch-result-item">
+                <span class="res-label">Gateway Provider:</span>
+                <b id="res-provider" class="text-green">—</b>
+              </div>
+              <div class="dispatch-result-item">
+                <span class="res-label">Message SID:</span>
+                <b id="res-sid" class="tabular-num text-muted">—</b>
+              </div>
+              <div class="dispatch-result-item">
+                <span class="res-label">Channel:</span>
+                <b id="res-channel">—</b>
+              </div>
+              <div class="dispatch-result-item">
+                <span class="res-label">Scope / Destination:</span>
+                <b id="res-destination">—</b>
+              </div>
+              <div class="dispatch-result-item">
+                <span class="res-label">Target Audience:</span>
+                <b id="res-audience">—</b>
+              </div>
+              <div class="dispatch-result-item">
+                <span class="res-label">Confirmed Delivered:</span>
+                <b id="res-delivered" class="tabular-num text-green">—</b>
+              </div>
+              <div class="dispatch-result-item">
+                <span class="res-label">Delivery SLA:</span>
+                <b id="res-rate" class="tabular-num text-accent">—</b>
+              </div>
+              <div class="dispatch-result-item">
+                <span class="res-label">Transmission Latency:</span>
+                <b id="res-latency" class="tabular-num">—</b>
+              </div>
+              <div class="dispatch-result-item" id="res-cost-row">
+                <span class="res-label">Carrier Cost (INR):</span>
+                <b id="res-cost" class="tabular-num text-orange">—</b>
+              </div>
+            </div>
+
+            <div class="dispatch-carrier-note" id="res-carrier-note">
+              Carrier Handshake Verified across cellular BTS towers.
+            </div>
+          </div>
+
+          <!-- Live Telecom Routing Terminal -->
+          <div class="bento-card dispatch-terminal-card">
+            <div class="terminal-header">
+              <span class="terminal-dot red"></span>
+              <span class="terminal-dot yellow"></span>
+              <span class="terminal-dot green"></span>
+              <span class="terminal-title">Cellular BTS Broadcast Routing Feed</span>
+              <span class="terminal-live-tag">LIVE</span>
+            </div>
+            <div class="terminal-content" id="dispatch-terminal-feed">
+              <div class="terminal-line text-muted">[SYSTEM INIT] C-DOT Common Alerting Protocol (CAP) mesh ready.</div>
+              <div class="terminal-line text-accent">[TELECOM] BTS cellular tower transceivers listening on GSM-7 &amp; W-CDMA.</div>
+              <div class="terminal-line text-green">[ROUTING] Ready for operational dispatch orders.</div>
+            </div>
+          </div>
+        </div>
+      </div>
+
+      <!-- Historical Broadcast Audit Trail & Compliance Archive -->
+      <div class="bento-card dispatch-log-card">
+        <div class="dispatch-log-header">
+          <div>
+            <span class="dispatch-log-title">Civil Defense Dispatch Audit Trail</span>
+            <span class="dispatch-log-subtitle text-muted">Immutable log of all transmitted public emergency broadcasts and direct handset alerts</span>
+          </div>
+          <div class="dispatch-log-controls">
+            <select class="dispatch-filter-select" id="dispatch-filter-channel">
+              <option value="ALL">All Channels</option>
+              <option value="SMS">SMS Only</option>
+              <option value="WhatsApp">WhatsApp Only</option>
+              <option value="WebPush">Web Push Only</option>
+            </select>
+            <select class="dispatch-filter-select" id="dispatch-filter-tier">
+              <option value="ALL">All Severity</option>
+              <option value="L3+">Level 3+ Only</option>
+              <option value="L4+">Level 4+ (Severe/Critical)</option>
+            </select>
+            <button class="dispatch-action-btn" id="dispatch-export-csv-btn">📥 Export Audit CSV</button>
+            <button class="dispatch-action-btn" id="dispatch-refresh-log-btn">🔄 Refresh Log</button>
+            <button class="dispatch-action-btn text-danger" id="dispatch-clear-log-btn">🗑️ Clear Log</button>
+          </div>
+        </div>
+        <div class="dispatch-log-table-wrap">
+          <table class="dispatch-log-table">
+            <thead>
+              <tr>
+                <th>Dispatch ID</th>
+                <th>Timestamp (UTC)</th>
+                <th>Mode &amp; Destination</th>
+                <th>Channel</th>
+                <th>Audience Cohort</th>
+                <th>Recipients</th>
+                <th>Delivered</th>
+                <th>Delivery SLA</th>
+                <th>Severity</th>
+                <th>Status</th>
+                <th>Provider</th>
+              </tr>
+            </thead>
+            <tbody id="dispatch-log-tbody">
+              <tr><td colspan="11" class="dispatch-log-empty">Loading transmission audit log...</td></tr>
+            </tbody>
+          </table>
+        </div>
+      </div>
+    </section>
+  </div><!-- /view-dispatch -->
+
+  <!-- ================================================================ -->
+  <!-- VIEW 11: POLICY MODELER & EXECUTIVE SITREP (OFFICIAL)            -->
+  <!-- ================================================================ -->
+  <div class="dashboard-view-page admin-only" id="view-sim">
+    <section class="dashboard-section sim-section admin-only" id="sim-section">
+      <div class="section-header">
+        <div class="section-title-wrap">
+          <span class="section-tag">DECISION SUPPORT</span>
+          <h2 class="section-heading">What-If Policy Intervention &amp; Counterfactual Modeler</h2>
+        </div>
+      </div>
+
+      <div class="sim-grid-layout">
+        <div class="sim-controls-col bento-card">
+          <h3 class="panel-card-title">Municipal Policy Interventions</h3>
+          <div class="sim-policies-list">
+            <label class="sim-policy-toggle">
+              <input type="checkbox" id="policy-cool-roofs" checked>
+              <div class="sim-policy-info">
+                <div class="sim-policy-name">Cool Roofs &amp; Solar-Reflective Coatings</div>
+                <div class="sim-policy-desc">-1.8°C localized UHI reduction in informal settlements</div>
+              </div>
+            </label>
+            <label class="sim-policy-toggle">
+              <input type="checkbox" id="policy-labor-curfew" checked>
+              <div class="sim-policy-info">
+                <div class="sim-policy-name">11:00–16:00 Mandatory Outdoor Labor Curfew</div>
+                <div class="sim-policy-desc">Mandatory construction halt; -38% worker vulnerability</div>
+              </div>
+            </label>
+            <label class="sim-policy-toggle">
+              <input type="checkbox" id="policy-urban-greenery">
+              <div class="sim-policy-info">
+                <div class="sim-policy-name">Urban Green Canopies &amp; Misting Stations</div>
+                <div class="sim-policy-desc">-1.2°C surface temperature drop at transit hubs</div>
+              </div>
+            </label>
+            <label class="sim-policy-toggle">
+              <input type="checkbox" id="policy-slum-kits" checked>
+              <div class="sim-policy-info">
+                <div class="sim-policy-name">Slum ORS Hydration &amp; Cool-Kit Distribution</div>
+                <div class="sim-policy-desc">Targeted electrolyte &amp; evaporative curtain deployment</div>
+              </div>
+            </label>
+            <label class="sim-policy-toggle">
+              <input type="checkbox" id="policy-cooling-shelters">
+              <div class="sim-policy-info">
+                <div class="sim-policy-name">24/7 Air-Conditioned Cooling Shelter Network</div>
+                <div class="sim-policy-desc">Public library &amp; metro transit hubs with medical triage</div>
+              </div>
+            </label>
+          </div>
+
+          <div class="sim-sensitivity-wrap">
+            <h4 class="panel-card-sub" style="margin:0.75rem 0 0.4rem;">Climate Sensitivity Stress-Testing</h4>
+            <div class="sim-slider-row">
+              <div class="sim-slider-head"><span>Temperature Shift: <b id="sim-temp-val" class="tabular-num">+0.0°C</b></span></div>
+              <input type="range" id="sim-temp-slider" min="-3" max="6" step="0.5" value="0" class="range-slider">
+            </div>
+            <div class="sim-slider-row">
+              <div class="sim-slider-head"><span>Humidity Shift: <b id="sim-rh-val" class="tabular-num">+0%</b></span></div>
+              <input type="range" id="sim-rh-slider" min="-20" max="25" step="5" value="0" class="range-slider">
+            </div>
+          </div>
+        </div>
+
+        <div class="sim-results-col bento-card">
+          <h3 class="panel-card-title">Simulated Counterfactual Impact</h3>
+          <div class="sim-hero-metrics">
+            <div class="sim-hero-stat-box">
+              <div class="sim-hero-val tabular-num" id="sim-lives-saved">—</div>
+              <div class="sim-hero-lbl">Estimated Lives Saved</div>
+            </div>
+            <div class="sim-hero-stat-box">
+              <div class="sim-hero-val tabular-num" id="sim-averted-adm">—</div>
+              <div class="sim-hero-lbl">Averted Admissions</div>
+            </div>
+            <div class="sim-hero-stat-box">
+              <div class="sim-hero-val tabular-num" id="sim-grid-shaved">— MW</div>
+              <div class="sim-hero-lbl">Peak Grid Shaved</div>
+            </div>
+          </div>
+
+          <div class="sim-comparison-table-wrap">
+            <table class="sim-comparison-table">
+              <thead><tr><th>Metric</th><th>Baseline (No Action)</th><th>With Interventions</th><th>Net Benefit</th></tr></thead>
+              <tbody>
+                <tr><td>Peak Heat Index</td><td id="comp-base-hi" class="tabular-num">—°C</td><td id="comp-int-hi" class="tabular-num" style="color:#0284c7; font-weight:600;">—°C</td><td id="comp-diff-hi" class="tabular-num" style="color:#10b981; font-weight:600;">—</td></tr>
+                <tr><td>Vulnerability (HVI)</td><td id="comp-base-hvi" class="tabular-num">—</td><td id="comp-int-hvi" class="tabular-num" style="color:#0284c7; font-weight:600;">—</td><td id="comp-diff-hvi" class="tabular-num" style="color:#10b981; font-weight:600;">—</td></tr>
+                <tr><td>Excess Mortality %</td><td id="comp-base-mort" class="tabular-num">—%</td><td id="comp-int-mort" class="tabular-num" style="color:#0284c7; font-weight:600;">—%</td><td id="comp-diff-mort" class="tabular-num" style="color:#10b981; font-weight:600;">—</td></tr>
+                <tr><td>Economic Value of Statistical Lives</td><td colspan="3" style="text-align:center; font-family:var(--font-mono); color:#10b981; font-weight:700;" id="comp-economic-val">₹0.00 Cr</td></tr>
+              </tbody>
+            </table>
+          </div>
+        </div>
+      </div>
+    </section>
+
+    <!-- ================================================================ -->
+    <!-- SECTION 12: HISTORICAL BENCHMARKS & EXECUTIVE SITREP REPORT      -->
+    <!-- ================================================================ -->
+    <section class="dashboard-section history-section admin-only" id="history-section">
+      <div class="section-header">
+        <div class="section-title-wrap">
+          <h2 class="section-heading">Landmark Heatwave Disasters vs. Current Trajectory</h2>
+        </div>
+      </div>
+
+      <div class="history-grid-layout">
+        <div class="history-cards-col" id="history-cards-col">
+          <div class="history-card skeleton-card">
+            <div class="hist-card-head" style="display:flex; justify-content:space-between; align-items:flex-start;">
+              <div style="flex:1;">
+                <div class="skeleton-shimmer skeleton-text" style="width:68%; height:16px; margin-bottom:5px;"></div>
+                <div class="skeleton-shimmer skeleton-text" style="width:45%; height:11px;"></div>
+              </div>
+              <div class="skeleton-shimmer skeleton-pill" style="width:75px; height:20px;"></div>
+            </div>
+            <div class="skeleton-shimmer skeleton-text" style="width:90%; height:12px; margin:10px 0 4px;"></div>
+            <div class="skeleton-shimmer skeleton-text" style="width:75%; height:12px; margin-bottom:12px;"></div>
+            <div class="hist-metrics-grid" style="display:grid; grid-template-columns:repeat(3, 1fr); gap:8px;">
+              <div class="skeleton-shimmer" style="height:46px; border-radius:6px;"></div>
+              <div class="skeleton-shimmer" style="height:46px; border-radius:6px;"></div>
+              <div class="skeleton-shimmer" style="height:46px; border-radius:6px;"></div>
+            </div>
+          </div>
+          <div class="history-card skeleton-card">
+            <div class="hist-card-head" style="display:flex; justify-content:space-between; align-items:flex-start;">
+              <div style="flex:1;">
+                <div class="skeleton-shimmer skeleton-text" style="width:62%; height:16px; margin-bottom:5px;"></div>
+                <div class="skeleton-shimmer skeleton-text" style="width:40%; height:11px;"></div>
+              </div>
+              <div class="skeleton-shimmer skeleton-pill" style="width:70px; height:20px;"></div>
+            </div>
+            <div class="skeleton-shimmer skeleton-text" style="width:85%; height:12px; margin:10px 0 4px;"></div>
+            <div class="skeleton-shimmer skeleton-text" style="width:70%; height:12px; margin-bottom:12px;"></div>
+            <div class="hist-metrics-grid" style="display:grid; grid-template-columns:repeat(3, 1fr); gap:8px;">
+              <div class="skeleton-shimmer" style="height:46px; border-radius:6px;"></div>
+              <div class="skeleton-shimmer" style="height:46px; border-radius:6px;"></div>
+              <div class="skeleton-shimmer" style="height:46px; border-radius:6px;"></div>
+            </div>
+          </div>
+          <div class="history-card skeleton-card">
+            <div class="hist-card-head" style="display:flex; justify-content:space-between; align-items:flex-start;">
+              <div style="flex:1;">
+                <div class="skeleton-shimmer skeleton-text" style="width:70%; height:16px; margin-bottom:5px;"></div>
+                <div class="skeleton-shimmer skeleton-text" style="width:42%; height:11px;"></div>
+              </div>
+              <div class="skeleton-shimmer skeleton-pill" style="width:75px; height:20px;"></div>
+            </div>
+            <div class="skeleton-shimmer skeleton-text" style="width:88%; height:12px; margin:10px 0 4px;"></div>
+            <div class="skeleton-shimmer skeleton-text" style="width:65%; height:12px; margin-bottom:12px;"></div>
+            <div class="hist-metrics-grid" style="display:grid; grid-template-columns:repeat(3, 1fr); gap:8px;">
+              <div class="skeleton-shimmer" style="height:46px; border-radius:6px;"></div>
+              <div class="skeleton-shimmer" style="height:46px; border-radius:6px;"></div>
+              <div class="skeleton-shimmer" style="height:46px; border-radius:6px;"></div>
+            </div>
+          </div>
+        </div>
+
+        <div class="bento-card hap-export-box">
+          <h3 class="panel-card-title">Executive Municipal SitRep &amp; Data Hub</h3>
+          <p class="hap-export-desc">
+            Export raw 48-hour biometeorological matrices for research or generate an official, print-formatted Situational Report (SitRep) for the Municipal Commissioner.
+          </p>
+
+          <div class="hap-export-meta">
+            <div class="hap-meta-item"><span>Authority:</span> <b>Delhi Disaster Management Authority</b></div>
+            <div class="hap-meta-item"><span>Operational Framework:</span> <b>National Heat Action Plan (IMD/NDMA)</b></div>
+            <div class="hap-meta-item"><span>Generation Timestamp:</span> <b id="hap-report-time" class="tabular-num">Live UTC</b></div>
+          </div>
+
+          <div class="export-actions-row">
+            <button class="btn-export-csv" id="btn-export-csv">
+              <svg viewBox="0 0 24 24" width="15" height="15" stroke="currentColor" stroke-width="2" fill="none"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><polyline points="7 10 12 15 17 10"/><line x1="12" y1="15" x2="12" y2="3"/></svg>
+              <span>DOWNLOAD 48H CSV DATASET</span>
+            </button>
+
+            <button class="btn-export-report" id="btn-export-report" onclick="window.print();">
+              <span>PRINT SITREP BULLETIN</span>
+            </button>
+          </div>
+        </div>
+      </div>
+    </section>
+  </div><!-- /view-sim -->
+
+      </main>
+
+      <!-- Institutional Footer -->
+      <footer class="app-footer">
+        <div class="footer-container">
+          <div class="footer-left">
+            <span class="footer-brand">HEATSHIELD PRO</span>
+            <span class="footer-sub">Operational Biometeorology &amp; Climate Defense Platform</span>
+          </div>
+          <div class="footer-right">
+            <span>Meteorological stream via <a href="https://open-meteo.com" target="_blank" rel="noreferrer">Open-Meteo</a> • NOAA &amp; WHO Standards.</span>
+            <span class="footer-disclaimer">Informational decision-support platform. Always adhere to national public health advisories.</span>
+          </div>
+        </div>
+      </footer>
+
+    </div><!-- /app-main-area -->
+  </div><!-- /app-shell -->
+
+  <!-- User Authentication Modal -->
+  <div class="modal-backdrop" id="auth-modal" style="display:none;">
+    <div class="modal-card bento-card">
+      <div class="modal-header">
+        <div class="modal-title-row">
+          <svg viewBox="0 0 24 24" width="18" height="18" stroke="currentColor" stroke-width="2" fill="none"><path d="M12 22s8-4 8-10V5l-8-3-8 3v7c0 6 8 10 8 10z"/><path d="M12 8v4"/><path d="M12 16h.01"/></svg>
+          <h3>HeatShield Access &amp; Authentication</h3>
+        </div>
+        <button id="btn-auth-close" class="modal-close-btn">&times;</button>
+      </div>
+
+      <div class="modal-body">
+        <div class="auth-tab-switch">
+          <button class="auth-tab-btn active" id="tab-login" data-tab="login">Sign In</button>
+          <button class="auth-tab-btn" id="tab-register" data-tab="register">Create Account</button>
+          <button class="auth-tab-btn" id="tab-fastdemo" data-tab="fastdemo">1-Click Fast Demo</button>
+        </div>
+
+        <form id="form-auth-login" class="auth-form-panel">
+          <button type="button" class="btn-google-auth" id="btn-google-login">
+            <svg viewBox="0 0 24 24" width="18" height="18">
+              <path fill="#4285F4" d="M23.745 12.27c0-.7-.06-1.4-.19-2.07H12v4.51h6.6c-.29 1.52-1.14 2.82-2.4 3.68v3.05h3.88c2.27-2.09 3.665-5.17 3.665-9.17z"/>
+              <path fill="#34A853" d="M12 24c3.24 0 5.95-1.08 7.93-2.91l-3.88-3.05c-1.08.72-2.45 1.16-4.05 1.16-3.12 0-5.77-2.1-6.72-4.93H1.25v3.15C3.26 21.36 7.33 24 12 24z"/>
+              <path fill="#FBBC05" d="M5.28 14.27c-.25-.72-.38-1.49-.38-2.27s.13-1.55.38-2.27V6.58H1.25C.45 8.18 0 9.99 0 12s.45 3.82 1.25 5.42l4.03-3.15z"/>
+              <path fill="#EA4335" d="M12 4.75c1.77 0 3.35.61 4.6 1.8l3.42-3.42C17.95 1.19 15.24 0 12 0 7.33 0 3.26 2.64 1.25 6.58l4.03 3.15c.95-2.83 3.6-4.98 6.72-4.98z"/>
+            </svg>
+            <span>Continue with Google</span>
+          </button>
+
+          <div class="auth-divider"><span>OR CONTINUE WITH EMAIL</span></div>
+
+          <div class="auth-form-field">
+            <label class="auth-label">Official Email / ID</label>
+            <input type="email" id="login-email" class="auth-input" placeholder="e.g. officer@heatshield.gov.in" required>
+          </div>
+          <div class="auth-form-field">
+            <label class="auth-label">Password</label>
+            <input type="password" id="login-password" class="auth-input" placeholder="••••••••" required>
+          </div>
+          <div class="auth-msg-box" id="login-msg-box" style="display:none;"></div>
+          <button type="submit" class="auth-submit-btn" id="btn-submit-login">SIGN IN TO HEATSHIELD</button>
+        </form>
+
+        <form id="form-auth-register" class="auth-form-panel" style="display:none;">
+          <button type="button" class="btn-google-auth" id="btn-google-register">
+            <svg viewBox="0 0 24 24" width="18" height="18">
+              <path fill="#4285F4" d="M23.745 12.27c0-.7-.06-1.4-.19-2.07H12v4.51h6.6c-.29 1.52-1.14 2.82-2.4 3.68v3.05h3.88c2.27-2.09 3.665-5.17 3.665-9.17z"/>
+              <path fill="#34A853" d="M12 24c3.24 0 5.95-1.08 7.93-2.91l-3.88-3.05c-1.08.72-2.45 1.16-4.05 1.16-3.12 0-5.77-2.1-6.72-4.93H1.25v3.15C3.26 21.36 7.33 24 12 24z"/>
+              <path fill="#FBBC05" d="M5.28 14.27c-.25-.72-.38-1.49-.38-2.27s.13-1.55.38-2.27V6.58H1.25C.45 8.18 0 9.99 0 12s.45 3.82 1.25 5.42l4.03-3.15z"/>
+              <path fill="#EA4335" d="M12 4.75c1.77 0 3.35.61 4.6 1.8l3.42-3.42C17.95 1.19 15.24 0 12 0 7.33 0 3.26 2.64 1.25 6.58l4.03 3.15c.95-2.83 3.6-4.98 6.72-4.98z"/>
+            </svg>
+            <span>Sign up with Google</span>
+          </button>
+
+          <div class="auth-divider"><span>OR CREATE LOCAL ACCOUNT</span></div>
+
+          <div class="auth-form-field">
+            <label class="auth-label">Full Name &amp; Title</label>
+            <input type="text" id="reg-name" class="auth-input" placeholder="e.g. Dr. Priya Nair" required>
+          </div>
+          <div class="auth-form-field">
+            <label class="auth-label">Email Address</label>
+            <input type="email" id="reg-email" class="auth-input" placeholder="e.g. priya@hospital.org" required>
+          </div>
+          <div class="auth-form-field">
+            <label class="auth-label">Password</label>
+            <input type="password" id="reg-password" class="auth-input" placeholder="Minimum 6 characters" required>
+          </div>
+          <div class="auth-form-field">
+            <label class="auth-label">Access Role</label>
+            <select id="reg-role" class="auth-select">
+              <option value="CITIZEN">Citizen / Public Analyst</option>
+              <option value="HEALTH_EPIDEMIOLOGIST">Health Epidemiologist / CMO</option>
+              <option value="MUNICIPAL_OFFICER">Municipal Disaster Officer (DDMA / SDM)</option>
+            </select>
+          </div>
+          <div class="auth-form-field">
+            <label class="auth-label">Organization / Agency</label>
+            <input type="text" id="reg-org" class="auth-input" placeholder="e.g. All India Institute of Medical Sciences (AIIMS)">
+          </div>
+          <div class="auth-msg-box" id="reg-msg-box" style="display:none;"></div>
+          <button type="submit" class="auth-submit-btn" id="btn-submit-reg">REGISTER ACCOUNT</button>
+        </form>
+
+        <div id="panel-fastdemo" class="auth-form-panel" style="display:none;">
+          <p class="fastdemo-desc">Select an operational role to instantly experience role-based capabilities:</p>
+          <div class="demo-user-cards">
+            <button class="demo-user-card" id="btn-demo-officer" data-email="admin@heatshield.gov.in" data-pass="admin123">
+              <div class="demo-user-icon" style="background:rgba(2,132,199,0.15); color:#0284c7;">RV</div>
+              <div class="demo-user-info">
+                <div class="demo-user-name">Dr. Rajesh Verma</div>
+                <div class="demo-user-role" style="color:#0284c7;">Municipal Disaster Officer (DDMA)</div>
+                <div class="demo-user-perms">Full Access: HAP Directives, SMS Broadcasts, Policy Simulator</div>
+              </div>
+            </button>
+            <button class="demo-user-card" id="btn-demo-analyst" data-email="analyst@who.int" data-pass="analyst123">
+              <div class="demo-user-icon" style="background:rgba(16,185,129,0.15); color:#10b981;">ER</div>
+              <div class="demo-user-info">
+                <div class="demo-user-name">Elena Rostova, MD</div>
+                <div class="demo-user-role" style="color:#10b981;">Senior Epidemiologist (WHO)</div>
+                <div class="demo-user-perms">Full Access: DLNM Surge Models, Ward Vulnerability, Clinical Protocols</div>
+              </div>
+            </button>
+            <button class="demo-user-card" id="btn-demo-citizen" data-email="citizen@gmail.com" data-pass="citizen123">
+              <div class="demo-user-icon" style="background:rgba(148,163,184,0.15); color:#94a3b8;">AS</div>
+              <div class="demo-user-info">
+                <div class="demo-user-name">Aarav Sharma</div>
+                <div class="demo-user-role" style="color:#94a3b8;">Verified Citizen</div>
+                <div class="demo-user-perms">Public Access: Telemetry, Heatwave Radar, Hydration &amp; Triage</div>
+              </div>
+            </button>
+          </div>
+        </div>
+
+        <div id="panel-logged-in" class="auth-form-panel" style="display:none;">
+          <div class="user-active-card">
+            <div class="user-active-avatar" id="active-user-avatar">RV</div>
+            <div class="user-active-details">
+              <h4 id="active-user-name">Dr. Rajesh Verma</h4>
+              <p id="active-user-email">admin@heatshield.gov.in</p>
+              <div class="user-active-badge" id="active-user-badge">Municipal Disaster Officer</div>
+              <span class="user-active-org" id="active-user-org">Delhi Disaster Management Authority</span>
+            </div>
+          </div>
+          <button class="auth-logout-btn" id="btn-auth-logout">SIGN OUT OF SESSION</button>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <!-- Browser Push & Alert Subscription Modal (Feature 3) -->
+  <div class="modal-backdrop" id="notify-modal" style="display:none;">
+    <div class="modal-card bento-card">
+      <div class="modal-header">
+        <div class="modal-title-row">
+          <svg viewBox="0 0 24 24" width="18" height="18" stroke="currentColor" stroke-width="2" fill="none"><path d="M18 8A6 6 0 0 0 6 8c0 7-3 9-3 9h18s-3-2-3-9"/><path d="M13.73 21a2 2 0 0 1-3.46 0"/></svg>
+          <h3>Heatwave Push &amp; WhatsApp Alerts</h3>
+        </div>
+        <button id="btn-notify-close" class="modal-close-btn">&times;</button>
+      </div>
+
+      <div class="modal-body">
+        <p class="fastdemo-desc">Subscribe to automated early warning triggers delivered directly to your browser and smartphone:</p>
+        
+        <div class="notify-options-list">
+          <div class="notify-opt-card">
+            <div class="notify-opt-head">
+              <div>
+                <div class="notify-opt-title">Browser Web Push Notifications</div>
+                <div class="notify-opt-desc">Instant browser alerts when Heat Index &gt; 40°C</div>
+              </div>
+              <button class="toolbar-btn btn-enable-push" id="btn-enable-push">Enable Push</button>
+            </div>
+            <div class="notify-status-line" id="push-perm-status">Status: Permission Default</div>
+          </div>
+
+          <div class="notify-opt-card">
+            <div class="notify-opt-head">
+              <div>
+                <div class="notify-opt-title">SMS Text Message Alerts</div>
+                <div class="notify-opt-desc">Receive emergency text messages for critical heatwave conditions</div>
+              </div>
+              <button class="toolbar-btn btn-wa-sub" id="btn-sms-sub">Subscribe</button>
+            </div>
+            <div class="notify-input-row" id="sms-input-row" style="display:none; margin-top:0.65rem;">
+              <input type="tel" id="sms-phone-input" class="auth-input" placeholder="e.g. +91 98765 43210" style="flex:1;">
+              <button class="toolbar-btn" id="btn-submit-sms" style="background:#0284c7; color:#fff;">Save</button>
+            </div>
+          </div>
+
+          <div class="notify-opt-card">
+            <div class="notify-opt-head">
+              <div>
+                <div class="notify-opt-title">WhatsApp Emergency Broadcast Bot</div>
+                <div class="notify-opt-desc">Daily 08:00 AM heatwave outlook &amp; municipal curfew advisories</div>
+              </div>
+              <button class="toolbar-btn btn-wa-sub" id="btn-wa-sub">Subscribe</button>
+            </div>
+            <div class="notify-input-row" id="wa-input-row" style="display:none; margin-top:0.65rem;">
+              <input type="tel" id="wa-phone-input" class="auth-input" placeholder="e.g. +91 98765 43210" style="flex:1;">
+              <button class="toolbar-btn" id="btn-submit-wa" style="background:#10b981; color:#fff;">Save</button>
+            </div>
+          </div>
+        </div>
+
+        <div class="notify-test-row" style="margin-top:1.25rem;">
+          <button class="auth-submit-btn" id="btn-send-test-push" style="background:#0284c7;">
+            DISPATCH SIMULATED TEST ALERT
+          </button>
+        </div>
+
+        <div class="auth-msg-box" id="notify-msg-box" style="display:none; margin-top:0.75rem;"></div>
+      </div>
+    </div>
+  </div>
+
+  <!-- Floating Back to Top Button -->
+  <button id="btn-floating-top" class="floating-top-btn" title="Back to Top" aria-label="Back to Top">
+    <svg viewBox="0 0 24 24" width="20" height="20" stroke="currentColor" stroke-width="2.5" fill="none">
+      <polyline points="18 15 12 9 6 15"></polyline>
+    </svg>
+  </button>
+
+  <!-- Scripts -->
+  <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
+  <script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js" integrity="sha256-20nQCchB9co0qIjJZRGuk2/Z9VM+kNiyxNV1lvTlZBo=" crossorigin=""></script>
+  <script type="module" src="/static/firebase-auth.js"></script>
+  <script src="/static/app.js"></script>
+</body>
+</html>
