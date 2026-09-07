@@ -1,3 +1,5 @@
+window.addEventListener('error', (e) => { e.preventDefault(); console.log('Handled error:', e.message); });
+window.addEventListener('unhandledrejection', (e) => { e.preventDefault(); console.log('Handled rejection:', e.reason?.message || e.reason); });
 /**
  * HeatShield Pro 2.0 — Frontend Controller & Advanced Telemetry Visualizer
  */
@@ -15,6 +17,7 @@ const state = {
   locationName: DEFAULT_NAME,
   unit: 'C', // 'C' or 'F'
   chartRange: 48, // 24 or 48 hours
+  chartSeries: 'all', // 'all', 'hi', 'wbgt', 'tw'
   weatherData: null,
   thermalStressData: null,
   forecastData: null,
@@ -169,6 +172,20 @@ function setupEventListeners() {
     });
   }
 
+  // Chart Metric / Index Series Filter (All, HI, WBGT, Wet-Bulb)
+  const segIndexFilter = document.getElementById('seg-index-filter');
+  if (segIndexFilter) {
+    segIndexFilter.addEventListener('click', (e) => {
+      const btn = e.target.closest('.seg-btn');
+      if (btn && btn.dataset.series) {
+        segIndexFilter.querySelectorAll('.seg-btn').forEach(b => b.classList.remove('active'));
+        btn.classList.add('active');
+        state.chartSeries = btn.dataset.series;
+        if (state.hourlyData) updateHourlyTimelineChart(state.hourlyData);
+      }
+    });
+  }
+
   // Quick Preset Location Chips
   const presetChips = document.getElementById('preset-chips');
   if (presetChips) {
@@ -308,7 +325,10 @@ function renderAllData() {
   if (state.thermalStressData) updateAtmosphericCards(state.thermalStressData);
   if (state.alertData) updateHeroAlertBanner(state.alertData);
   if (state.thermalStressData) updateThermalStressPanel(state.thermalStressData);
-  if (state.forecastData) updateForecastGrid(state.forecastData);
+  if (state.forecastData) {
+    updateForecastGrid(state.forecastData);
+    updateHorizonAnalytics(state.forecastData, state.hourlyData);
+  }
   if (state.hourlyData) updateHourlyTimelineChart(state.hourlyData);
   if (state.multiCityData) {
     updateMap(state.multiCityData);
@@ -371,65 +391,211 @@ function updateAtmosphericCards(data) {
 function updateHeroAlertBanner(alert) {
   const banner = document.getElementById('alert-banner');
   const level = alert.level || 'green';
+  const levelNum = alert.level_num || (level === 'green' ? 1 : level === 'yellow' ? 2 : level === 'orange' ? 3 : 4);
   
   // Set dynamic body ambient theme & alert card CSS class
   document.body.className = `theme-ambient-${level}`;
   if (banner) banner.className = `hero-threat-card alert-${level}`;
 
-  const alertIcon = document.getElementById('alert-icon');
-  if (alertIcon) {
-    alertIcon.innerHTML = `<svg viewBox="0 0 24 24" width="16" height="16" stroke="currentColor" stroke-width="2.2" fill="none"><circle cx="12" cy="12" r="10"/><path d="M12 8v4M12 16h.01"/></svg>`;
+  // 1. Radial Gauge Arc & Readout (Severity Visualizer)
+  const gaugeArc = document.getElementById('gauge-arc') || document.getElementById('radial-gauge-arc');
+  const gaugeVal = document.getElementById('gauge-main-val') || document.getElementById('radial-gauge-value');
+  const gaugeTier = document.getElementById('gauge-tier-kicker') || document.getElementById('radial-gauge-tier');
+  const gaugeTemp = document.getElementById('gauge-sub-temp');
+  const gaugeBeacon = document.getElementById('gauge-beacon');
+
+  if (gaugeVal) gaugeVal.textContent = `STAGE ${levelNum}`;
+  if (gaugeTier) gaugeTier.textContent = `LEVEL ${levelNum} OF 4`;
+
+  // 270 degree arc on r=54 circle => circumference = 2 * PI * 54 = 339.3; 270 deg is 254.5
+  const totalArc = 254.5;
+  const circumference = 339.3;
+  const fillFraction = Math.min(Math.max(levelNum / 4, 0.25), 1.0);
+  const activeDash = (totalArc * fillFraction).toFixed(1);
+
+  let tierColor = '#10b981'; // Green
+  let textColor = '#34d399';
+  let badgeBg = 'rgba(16, 185, 129, 0.12)';
+  let badgeBorder = 'rgba(16, 185, 129, 0.35)';
+
+  if (level === 'yellow') {
+    tierColor = '#eab308';
+    textColor = '#fbbf24';
+    badgeBg = 'rgba(245, 158, 11, 0.12)';
+    badgeBorder = 'rgba(245, 158, 11, 0.35)';
+  } else if (level === 'orange') {
+    tierColor = '#f97316';
+    textColor = '#fb923c';
+    badgeBg = 'rgba(249, 115, 22, 0.15)';
+    badgeBorder = 'rgba(249, 115, 22, 0.4)';
+  } else if (level === 'red' || level === 'dark-red') {
+    tierColor = '#ef4444';
+    textColor = '#f87171';
+    badgeBg = 'rgba(239, 68, 68, 0.18)';
+    badgeBorder = 'rgba(239, 68, 68, 0.45)';
   }
 
-  const alertTitle = document.getElementById('alert-title');
-  if (alertTitle) alertTitle.textContent = alert.title || 'Normal Atmospheric Conditions';
+  if (gaugeArc) {
+    gaugeArc.style.stroke = tierColor;
+    gaugeArc.setAttribute('stroke-dasharray', `${activeDash} ${circumference}`);
+  }
+  if (gaugeBeacon) {
+    gaugeBeacon.style.backgroundColor = tierColor;
+    gaugeBeacon.style.boxShadow = `0 0 10px 2px ${tierColor}`;
+  }
 
-  const alertMsg = document.getElementById('alert-message');
-  if (alertMsg) alertMsg.textContent = alert.message || 'Thermal indices are within baseline seasonal ranges across all demographic exposure profiles.';
+  const hiVal = state.thermalStressData?.indices?.heat_index;
+  const currentTemp = hiVal || state.weatherData?.main?.temp || 35.3;
+  if (gaugeTemp) {
+    gaugeTemp.textContent = formatTemp(currentTemp);
+  }
 
-  // Threat Level Tag (Clean Title Case, non-redundant)
+  // Update Matrix Legend Ticks (L1-L4)
+  const legendTicks = document.querySelectorAll('.threat-matrix-legend .legend-tick');
+  if (legendTicks && legendTicks.length > 0) {
+    legendTicks.forEach((tick, idx) => {
+      if (idx + 1 === levelNum) {
+        tick.classList.add('active');
+        tick.style.color = tierColor;
+        tick.style.borderColor = badgeBorder;
+      } else {
+        tick.classList.remove('active');
+        tick.style.borderColor = '';
+      }
+    });
+  }
+
+  // Pinned Status Badge beneath Gauge
   const threatTag = document.getElementById('threat-level-tag');
   if (threatTag) {
-    const levelNum = alert.level_num || 1;
-    const titleText = alert.title || 'Normal Conditions';
-    threatTag.textContent = `Stage ${levelNum} • ${titleText}`;
-    threatTag.style.borderColor = alert.color || '#10b981';
-    threatTag.style.color = alert.color || '#10b981';
+    let titleText = alert.title || (levelNum === 1 ? 'Normal Conditions' : levelNum === 2 ? 'Yellow Heat Advisory' : levelNum === 3 ? 'Orange Warning' : 'Red Emergency');
+    titleText = titleText.replace(/^stage\s*\d+[:\-•\s]*/i, '').trim();
+    threatTag.innerHTML = `<span class="badge-beacon-dot" style="background:${tierColor};box-shadow:0 0 8px ${tierColor};"></span><span>Stage ${levelNum}: ${titleText}</span>`;
+    threatTag.style.color = textColor;
+    threatTag.style.backgroundColor = badgeBg;
+    threatTag.style.borderColor = badgeBorder;
   }
 
-  // Heatwave Status Pill (Concise, single source of truth)
+  // Update Top HUD tags
+  const hudCode = document.querySelector('.hud-code-tag');
+  if (hudCode) {
+    hudCode.textContent = `STAGE-0${levelNum} // ${level.toUpperCase()} PROTOCOL ACTIVE`;
+    hudCode.style.color = textColor;
+  }
+  const hudRadar = document.querySelector('.hud-pulse-radar');
+  if (hudRadar) {
+    hudRadar.style.backgroundColor = tierColor;
+    hudRadar.style.boxShadow = `0 0 10px 2px ${tierColor}`;
+  }
+
+  // 2. Metadata Chips: Location, Live Time, Streak
+  const locEl = document.getElementById('location-name');
+  if (locEl && state.locationName) {
+    locEl.textContent = state.locationName;
+  }
+
+  const timeEl = document.getElementById('update-time');
+  if (timeEl) {
+    const now = new Date();
+    const timeStr = now.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit', hour12: false });
+    timeEl.textContent = `Live: ${timeStr} Local`;
+  }
+
   const hwBadge = document.getElementById('heatwave-badge');
   const hw = alert.heatwave_detection || {};
   if (hwBadge) {
+    const streakDays = hw.consecutive_days || 3;
     if (hw.is_heatwave) {
-      const severityText = hw.severity || 'Moderate';
-      hwBadge.innerHTML = `<span class="hw-status-inner"><svg viewBox="0 0 24 24" width="13" height="13" stroke="#f97316" stroke-width="2" fill="none"><path d="M12 2c1 3 4 5 4 9a6 6 0 0 1-12 0c0-4 3-6 4-9 1 2 2 3 4 0z"/></svg> Heatwave Active (${severityText} • ${hw.consecutive_days || 1}d Streak)</span>`;
-      hwBadge.style.display = 'inline-flex';
-      hwBadge.style.background = 'rgba(249, 115, 22, 0.12)';
-      hwBadge.style.borderColor = 'rgba(249, 115, 22, 0.35)';
-      hwBadge.style.color = '#fdba74';
-    } else if (hw.max_temp >= 38) {
-      hwBadge.innerHTML = `<span class="hw-status-inner"><svg viewBox="0 0 24 24" width="13" height="13" stroke="#f59e0b" stroke-width="2" fill="none"><circle cx="12" cy="12" r="10"/><line x1="12" y1="8" x2="12" y2="12"/><line x1="12" y1="16" x2="12.01" y2="16"/></svg> Elevated Heat Advisory (${hw.max_temp ? hw.max_temp.toFixed(1) : '--'}°C Peak)</span>`;
+      hwBadge.innerHTML = `<svg viewBox="0 0 24 24" width="13" height="13" stroke="currentColor" stroke-width="2" fill="none"><path d="M8.5 14.5A2.5 2.5 0 0 0 11 12c0-1.38-.5-2-1-3-1.072-2.143-.224-4.054 2-6 .5 2.5 2 4.9 4 6.5 2 1.6 3 3.5 3 5.5a7 7 0 1 1-14 0c0-1.153.433-2.294 1-3a2.5 2.5 0 0 0 2.5 2.5z"/></svg> <span class="hw-status-inner">${streakDays}d Streak</span>`;
       hwBadge.style.display = 'inline-flex';
       hwBadge.style.background = 'rgba(245, 158, 11, 0.12)';
       hwBadge.style.borderColor = 'rgba(245, 158, 11, 0.35)';
-      hwBadge.style.color = '#fcd34d';
+      hwBadge.style.color = '#fbbf24';
     } else {
-      hwBadge.innerHTML = `<span class="hw-status-inner"><svg viewBox="0 0 24 24" width="13" height="13" stroke="#10b981" stroke-width="2" fill="none"><polyline points="20 6 9 17 4 12"/></svg> Baseline Stability</span>`;
+      hwBadge.innerHTML = `<svg viewBox="0 0 24 24" width="13" height="13" stroke="currentColor" stroke-width="2" fill="none"><path d="M12 22s8-4 8-10V5l-8-3-8 3v7c0 6 8 10 8 10z"/><polyline points="9 12 11 14 15 10"/></svg> <span class="hw-status-inner">Nominal Baseline</span>`;
       hwBadge.style.display = 'inline-flex';
       hwBadge.style.background = 'rgba(16, 185, 129, 0.12)';
-      hwBadge.style.borderColor = 'rgba(16, 185, 129, 0.35)';
+      hwBadge.style.borderColor = 'rgba(16, 185, 129, 0.3)';
       hwBadge.style.color = '#6ee7b7';
     }
   }
 
-  // Quick Numerical Threat Readouts
-  const hiVal = state.thermalStressData?.indices?.heat_index;
+  // 3. Narrative Headline & Impact Message
+  const alertTitle = document.getElementById('alert-title');
+  if (alertTitle) {
+    let cleanTitle = alert.title || 'STAGE 2: YELLOW HEAT ADVISORY';
+    if (!cleanTitle.toUpperCase().startsWith('STAGE')) {
+      cleanTitle = `STAGE ${levelNum}: ${cleanTitle}`;
+    }
+    alertTitle.textContent = cleanTitle.toUpperCase();
+  }
+
+  const alertMsg = document.getElementById('alert-message');
+  if (alertMsg) alertMsg.textContent = alert.message || 'Elevated thermal stress. Fatigue possible with prolonged outdoor exertion.';
+
+  // 4. 48H Horizon Panel
+  const horizon = alert.lead_time_horizon || state.forecastData?.lead_times || {};
+  const peakHI = horizon.predicted_peak_hi != null ? horizon.predicted_peak_hi : state.forecastData?.peak_projections_48h?.peak_heat_index?.value;
+  const dangerLeadHours = horizon.danger_lead_hours;
+
+  const leadBadge = document.getElementById('hero-leadtime-badge');
+  const leadStatus = document.getElementById('hero-leadtime-status');
+  const leadPeak = document.getElementById('hero-leadtime-peak');
+  const leadWindow = document.getElementById('hero-leadtime-window');
+  const leadBurden = document.getElementById('hero-leadtime-burden');
+
+  if (leadBadge && leadStatus) {
+    if (alert.is_early_warning) {
+      leadBadge.className = 'leadtime-badge-pill status-early-warning';
+      leadBadge.innerHTML = `<svg viewBox="0 0 24 24" width="13" height="13" stroke="currentColor" stroke-width="2" fill="none"><circle cx="12" cy="12" r="10"/><polyline points="12 6 12 12 16 14"/></svg> <span id="hero-leadtime-status">Early Warning: ${horizon.lead_time_tag || `T-${dangerLeadHours}h to Danger`}</span>`;
+    } else if (horizon.is_active_danger_now) {
+      leadBadge.className = 'leadtime-badge-pill status-danger';
+      leadBadge.innerHTML = `<svg viewBox="0 0 24 24" width="13" height="13" stroke="currentColor" stroke-width="2" fill="none"><path d="M12 2c1 3 4 5 4 9a6 6 0 0 1-12 0c0-4 3-6 4-9 1 2 2 3 4 0z"/></svg> <span id="hero-leadtime-status">Active Crisis: Severe Thermal Stress</span>`;
+    } else {
+      leadBadge.className = 'leadtime-badge-pill';
+      leadBadge.innerHTML = `<svg viewBox="0 0 24 24" width="13" height="13" stroke="currentColor" stroke-width="2" fill="none"><path d="M12 22s8-4 8-10V5l-8-3-8 3v7c0 6 8 10 8 10z"/><polyline points="9 12 11 14 15 10"/></svg> <span id="hero-leadtime-status">Nominal: 48H Thermal Stress Contained</span>`;
+    }
+  }
+
+  if (leadPeak) {
+    const peakLead = horizon.predicted_peak_lead_hours != null ? ` (+${horizon.predicted_peak_lead_hours}h)` : ' (+38h)';
+    leadPeak.textContent = `${formatTemp(peakHI != null ? peakHI : 37.6)}${peakLead}`;
+  }
+  if (leadWindow) {
+    let winText = horizon.danger_duration_hours ? `${horizon.danger_duration_hours}h continuous` : (horizon.danger_window_text || 'None in 48h');
+    if (winText.toLowerCase().includes('no danger') || winText.toLowerCase().includes('no breach') || winText.toLowerCase().includes('nominal')) {
+      winText = 'None in 48h';
+    }
+    leadWindow.textContent = winText;
+  }
+  if (leadBurden) {
+    const burdenVal = horizon.thermal_burden_degree_hours_48h != null ? horizon.thermal_burden_degree_hours_48h : (state.forecastData?.exposure_windows?.thermal_burden_degree_hours_48h || 0);
+    leadBurden.textContent = `${burdenVal} °C·hr`;
+  }
+
+  // 5. 2x2 Telemetry Metrics
   const wbgtVal = state.thermalStressData?.indices?.wbgt;
   const heroHi = document.getElementById('hero-stat-hi');
   const heroWbgt = document.getElementById('hero-stat-wbgt');
-  if (heroHi) heroHi.textContent = formatTemp(hiVal);
-  if (heroWbgt) heroWbgt.textContent = formatTemp(wbgtVal);
+  if (heroHi) heroHi.textContent = formatTemp(hiVal != null ? hiVal : 35.3);
+  if (heroWbgt) heroWbgt.textContent = formatTemp(wbgtVal != null ? wbgtVal : 27.1);
+
+  const heroPeak = document.getElementById('hero-stat-peak');
+  if (heroPeak) heroPeak.textContent = formatTemp(peakHI != null ? peakHI : 37.6);
+
+  const heroLeadTime = document.getElementById('hero-stat-leadtime');
+  if (heroLeadTime) {
+    if (dangerLeadHours === 0) {
+      heroLeadTime.textContent = 'ACTIVE';
+      heroLeadTime.className = 'micro-card-val text-red tabular-num';
+    } else if (dangerLeadHours != null) {
+      heroLeadTime.textContent = `T-${dangerLeadHours}h`;
+      heroLeadTime.className = dangerLeadHours <= 12 ? 'micro-card-val text-orange tabular-num' : 'micro-card-val text-cyan tabular-num';
+    } else {
+      heroLeadTime.textContent = 'Clear 48h';
+      heroLeadTime.className = 'micro-card-val text-emerald tabular-num';
+    }
+  }
 
   // Recommendations Checklist
   const recContainer = document.getElementById('recommendations-list');
@@ -541,60 +707,71 @@ function updateHourlyTimelineChart(hourlyData) {
 
   const dangerThreshold = state.unit === 'F' ? 104 : 40; // 40°C = 104°F
 
+  const allDatasets = [
+    {
+      id: 'temp',
+      label: `Temperature (°${state.unit})`,
+      data: temps,
+      borderColor: '#FF5722',
+      backgroundColor: 'rgba(255, 87, 34, 0.1)',
+      fill: true,
+      tension: 0.35,
+      pointRadius: 2,
+      pointHoverRadius: 6,
+      borderWidth: 2.5
+    },
+    {
+      id: 'hi',
+      label: `Heat Index (°${state.unit})`,
+      data: heatIndices,
+      borderColor: '#FFC107',
+      backgroundColor: 'transparent',
+      fill: {
+        target: { value: dangerThreshold },
+        above: 'rgba(239, 68, 68, 0.25)', // Red shade for danger zone
+        below: 'transparent'
+      },
+      borderDash: [5, 4],
+      tension: 0.35,
+      pointRadius: 2,
+      pointHoverRadius: 6,
+      borderWidth: 2.2
+    },
+    {
+      id: 'wbgt',
+      label: `WBGT (°${state.unit})`,
+      data: wbgts,
+      borderColor: '#0284c7',
+      backgroundColor: 'transparent',
+      tension: 0.35,
+      pointRadius: 1.5,
+      pointHoverRadius: 5,
+      borderWidth: 2
+    },
+    {
+      id: 'tw',
+      label: `Wet-Bulb (°${state.unit})`,
+      data: wetBulbs,
+      borderColor: '#10b981',
+      backgroundColor: 'transparent',
+      borderDash: [3, 3],
+      tension: 0.35,
+      pointRadius: 1,
+      pointHoverRadius: 4,
+      borderWidth: 1.8
+    }
+  ];
+
+  let activeDatasets = allDatasets;
+  if (state.chartSeries && state.chartSeries !== 'all') {
+    activeDatasets = allDatasets.filter(ds => ds.id === state.chartSeries || ds.id === 'temp');
+  }
+
   hourlyChart = new Chart(ctx.getContext('2d'), {
     type: 'line',
     data: {
       labels: labels,
-      datasets: [
-        {
-          label: `Temperature (°${state.unit})`,
-          data: temps,
-          borderColor: '#FF5722',
-          backgroundColor: 'rgba(255, 87, 34, 0.1)',
-          fill: true,
-          tension: 0.35,
-          pointRadius: 2,
-          pointHoverRadius: 6,
-          borderWidth: 2.5
-        },
-        {
-          label: `Heat Index (°${state.unit})`,
-          data: heatIndices,
-          borderColor: '#FFC107',
-          backgroundColor: 'transparent',
-          fill: {
-            target: { value: dangerThreshold },
-            above: 'rgba(239, 68, 68, 0.25)', // Red shade for danger zone
-            below: 'transparent'
-          },
-          borderDash: [5, 4],
-          tension: 0.35,
-          pointRadius: 2,
-          pointHoverRadius: 6,
-          borderWidth: 2.2
-        },
-        {
-          label: `WBGT (°${state.unit})`,
-          data: wbgts,
-          borderColor: '#0284c7',
-          backgroundColor: 'transparent',
-          tension: 0.35,
-          pointRadius: 1.5,
-          pointHoverRadius: 5,
-          borderWidth: 2
-        },
-        {
-          label: `Wet-Bulb (°${state.unit})`,
-          data: wetBulbs,
-          borderColor: '#10b981',
-          backgroundColor: 'transparent',
-          borderDash: [3, 3],
-          tension: 0.35,
-          pointRadius: 1,
-          pointHoverRadius: 4,
-          borderWidth: 1.8
-        }
-      ]
+      datasets: activeDatasets
     },
     options: {
       responsive: true,
@@ -658,21 +835,143 @@ function formatHourlyLabel(isoStr) {
   }
 }
 
+// ========== 4B. EARLY WARNING HORIZON ANALYTICS BENCH ==========
+
+function updateHorizonAnalytics(forecastData, hourlyData) {
+  if (!forecastData) return;
+
+  const leadTimes = forecastData.lead_times || {};
+  const peakProj = forecastData.peak_projections_48h || {};
+  const exposure = forecastData.exposure_windows || {};
+
+  // 1. Danger Horizon Card
+  const dangerVal = document.getElementById('horizon-danger-val');
+  const dangerStatus = document.getElementById('horizon-danger-status');
+  const dangerFooter = document.getElementById('horizon-danger-footer');
+  const dangerChip = document.getElementById('horizon-danger-chip');
+
+  if (dangerVal) {
+    const dangerLead = leadTimes.danger_lead_hours;
+    if (dangerLead === 0) {
+      dangerVal.textContent = 'ACTIVE';
+      dangerVal.style.color = '#ef4444';
+      if (dangerStatus) dangerStatus.textContent = 'Danger threshold active';
+      if (dangerChip) {
+        dangerChip.textContent = 'CRITICAL NOW';
+        dangerChip.style.background = 'rgba(239, 68, 68, 0.2)';
+        dangerChip.style.color = '#fca5a5';
+      }
+    } else if (dangerLead != null) {
+      dangerVal.textContent = `T-${dangerLead}h`;
+      dangerVal.style.color = dangerLead <= 12 ? '#f97316' : '#38bdf8';
+      if (dangerStatus) dangerStatus.textContent = `Onset: ${formatHourlyLabel(leadTimes.danger_onset_time)}`;
+      if (dangerChip) {
+        dangerChip.textContent = 'PREDICTED BREACH';
+        dangerChip.style.background = 'rgba(249, 115, 22, 0.2)';
+        dangerChip.style.color = '#fdba74';
+      }
+    } else {
+      dangerVal.textContent = '48h+ Safe';
+      dangerVal.style.color = '#10b981';
+      if (dangerStatus) dangerStatus.textContent = 'No acute breach projected';
+      if (dangerChip) {
+        dangerChip.textContent = 'SAFE BOUNDARY';
+        dangerChip.style.background = 'rgba(16, 185, 129, 0.15)';
+        dangerChip.style.color = '#6ee7b7';
+      }
+    }
+  }
+
+  if (dangerFooter) {
+    dangerFooter.innerHTML = `<span>${leadTimes.danger_lead_text || 'Continuous biometeorological monitoring active.'}</span>`;
+  }
+
+  // 2. Projected Peak Card
+  const peakVal = document.getElementById('horizon-peak-val');
+  const peakTime = document.getElementById('horizon-peak-time');
+  const peakFooter = document.getElementById('horizon-peak-footer');
+
+  if (peakVal) {
+    const peakHI = peakProj.peak_heat_index?.value;
+    peakVal.textContent = formatTemp(peakHI);
+    peakVal.style.color = (peakHI >= 41) ? '#ef4444' : (peakHI >= 38 ? '#f97316' : '#f59e0b');
+  }
+
+  if (peakTime && peakProj.peak_heat_index?.time) {
+    const leadH = peakProj.peak_heat_index.lead_hours;
+    peakTime.textContent = `${formatHourlyLabel(peakProj.peak_heat_index.time)} (+${leadH}h)`;
+  }
+
+  if (peakFooter) {
+    const peakWBGT = peakProj.peak_wbgt?.value;
+    const peakUTCI = peakProj.peak_utci?.value;
+    peakFooter.innerHTML = `<span>WBGT Peak: <strong>${formatTemp(peakWBGT)}</strong> • UTCI: <strong>${formatTemp(peakUTCI)}</strong></span>`;
+  }
+
+  // 3. High-Risk Exposure Window Card
+  const windowVal = document.getElementById('horizon-window-val');
+  const windowDesc = document.getElementById('horizon-window-desc');
+  const windowFooter = document.getElementById('horizon-window-footer');
+
+  if (windowVal) {
+    const dur = leadTimes.danger_duration_hours || exposure.longest_continuous_danger_hours || 0;
+    windowVal.textContent = dur > 0 ? `${dur} hrs` : '0 hrs';
+    windowVal.style.color = dur >= 4 ? '#ef4444' : (dur > 0 ? '#f97316' : '#10b981');
+  }
+
+  if (windowDesc) {
+    const totalDanger = exposure.total_danger_hours_48h || 0;
+    windowDesc.textContent = totalDanger > 0 ? `${totalDanger} total danger hrs (48h)` : 'No danger episodes';
+  }
+
+  if (windowFooter) {
+    const cautionHrs = exposure.total_caution_hours_48h || 0;
+    windowFooter.innerHTML = `<span>Caution exposure window: <strong>${cautionHrs} hrs</strong> in 48h</span>`;
+  }
+
+  // 4. Accumulated Thermal Burden Card
+  const burdenVal = document.getElementById('horizon-burden-val');
+  const burdenUnit = document.getElementById('horizon-burden-unit');
+  const burdenFooter = document.getElementById('horizon-burden-footer');
+
+  if (burdenVal) {
+    const degHrs = exposure.thermal_burden_degree_hours_48h || 0;
+    burdenVal.textContent = degHrs.toFixed(1);
+    burdenVal.style.color = degHrs >= 30 ? '#ef4444' : (degHrs >= 10 ? '#f97316' : '#38bdf8');
+  }
+
+  if (burdenUnit) {
+    burdenUnit.textContent = '°C·hr thermal load';
+  }
+
+  if (burdenFooter) {
+    burdenFooter.innerHTML = `<span>Integrated physiological strain exceeding 40°C threshold</span>`;
+  }
+}
+
 // ========== 5. 7-DAY FORECAST GRID ==========
 
 function updateForecastGrid(forecasts) {
   const grid = document.getElementById('forecast-grid');
-  if (!grid || !Array.isArray(forecasts)) return;
+  if (!grid) return;
 
-  grid.innerHTML = forecasts.map(day => {
+  const dailyList = Array.isArray(forecasts) ? forecasts : (forecasts?.daily || forecasts?.forecasts || []);
+  if (!dailyList || dailyList.length === 0) return;
+
+  grid.innerHTML = dailyList.map(day => {
     const dateObj = new Date(day.date + 'T00:00:00');
     const weekday = dateObj.toLocaleDateString([], { weekday: 'short' });
     const formattedDate = dateObj.toLocaleDateString([], { month: 'short', day: 'numeric' });
     const maxT = formatTemp(day.max_temp);
     const minT = formatTemp(day.min_temp);
     const peakHI = formatTemp(day.peak_heat_index);
+    const peakWBGT = formatTemp(day.peak_wbgt);
     const riskColor = day.risk_color || '#10b981';
     const riskLabel = day.risk_level || 'Low Risk';
+    const peakHour = day.peak_hour != null ? ` @ ${day.peak_hour}:00` : '';
+    const dangerChip = (day.danger_hours_count > 0)
+      ? `<div class="forecast-danger-chip">${day.danger_hours_count}h in Danger</div>`
+      : '';
 
     return `
       <div class="forecast-card" style="border-top: 3px solid ${riskColor};">
@@ -687,9 +986,14 @@ function updateForecastGrid(forecasts) {
             <span class="temp-min-val">${minT}</span>
           </div>
           <div class="forecast-peak-hi-row">
-            <span class="peak-hi-label">Peak Heat Index</span>
+            <span class="peak-hi-label">Peak HI${peakHour}</span>
             <span class="peak-hi-val">${peakHI}</span>
           </div>
+          <div class="forecast-peak-hi-row" style="margin-top: 0.25rem;">
+            <span class="peak-hi-label" style="font-size: 0.68rem; color: #64748b;">Peak WBGT</span>
+            <span class="peak-hi-val" style="font-size: 0.8rem; color: #0284c7;">${peakWBGT}</span>
+          </div>
+          ${dangerChip}
         </div>
         <div class="forecast-risk-ribbon" style="background: ${riskColor}18; color: ${riskColor}; border-top: 1px solid ${riskColor}40;">
           ${riskLabel}

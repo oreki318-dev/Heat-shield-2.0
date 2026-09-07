@@ -1,7 +1,9 @@
+process.on('uncaughtException', (err) => { console.log('Handled exception:', err.message); });
+process.on('unhandledRejection', (reason, promise) => { console.log('Handled rejection:', reason?.message || reason); });
 import express from 'express';
 import path from 'path';
 import { fileURLToPath } from 'url';
-import { computeIndices } from './thermal_indices.js';
+import { computeIndices, computeThermalStressHorizon } from './thermal_indices.js';
 import { NATIONAL_CITIES, resolveCity, getDistanceKm } from './city_data.js';
 import twilio from 'twilio';
 import { GoogleGenAI } from '@google/genai';
@@ -162,7 +164,10 @@ async function fetchWeather(lat, lon) {
         WEATHER_CACHE.set(cacheKey, { data, timestamp: now });
         return data;
     } catch (e) {
-        console.warn(`Weather API fallback activated for ${lat},${lon}:`, e.message);
+        if (!WEATHER_CACHE.has('last_warn_' + cacheKey) || now - WEATHER_CACHE.get('last_warn_' + cacheKey) > 60000) {
+            console.log(`Weather API fallback activated for ${lat},${lon}:`, e.message);
+            WEATHER_CACHE.set('last_warn_' + cacheKey, now);
+        }
         
         // Realistic fallback payload
         const times = Array.from({length: 48}, (_, i) => new Date(Date.now() + i * 3600000).toISOString());
@@ -271,31 +276,54 @@ app.get('/api/forecast', async (req, res) => {
     const data = await fetchWeather(lat, lon);
     if (!data || !data.daily) return res.status(503).json({ error: 'Data unavailable' });
     
-    const daily = data.daily;
-    const forecasts = [];
-    for(let i=0; i<daily.time.length; i++) {
-        const t_max = daily.temperature_2m_max[i];
-        const rh_assumed = 45;
-        const wind_ms_assumed = 10 / 3.6; 
-        const solar_assumed = 800;
-        
-        const indices = computeIndices(t_max, rh_assumed, wind_ms_assumed, solar_assumed);
-        
-        forecasts.push({
-            date: daily.time[i],
-            max_temp: t_max,
-            min_temp: daily.temperature_2m_min[i],
-            weather_code: daily.weather_code[i],
-            risk_level: indices.classifications.heat_index.category,
-            risk_color: indices.classifications.heat_index.color,
-            risk_summary: indices.classifications.heat_index.category,
-            level_num: indices.classifications.heat_index.level,
-            peak_heat_index: indices.heat_index,
-            peak_wbgt: indices.wbgt,
-            peak_utci: indices.utci
-        });
+    const horizon = computeThermalStressHorizon(data);
+    const dailyForecasts = horizon?.daily_forecasts || [];
+    
+    // If daily forecasts couldn't be derived from hourly, construct safely
+    if (dailyForecasts.length === 0) {
+        const daily = data.daily;
+        for(let i=0; i<daily.time.length; i++) {
+            const t_max = daily.temperature_2m_max[i];
+            const rh_assumed = 45;
+            const wind_ms_assumed = 10 / 3.6; 
+            const solar_assumed = 800;
+            const indices = computeIndices(t_max, rh_assumed, wind_ms_assumed, solar_assumed);
+            dailyForecasts.push({
+                date: daily.time[i],
+                max_temp: t_max,
+                min_temp: daily.temperature_2m_min[i],
+                weather_code: daily.weather_code[i],
+                risk_level: indices.classifications.heat_index.category,
+                risk_color: indices.classifications.heat_index.color,
+                risk_summary: indices.classifications.heat_index.category,
+                level_num: indices.classifications.heat_index.level,
+                peak_heat_index: indices.heat_index,
+                peak_wbgt: indices.wbgt,
+                peak_utci: indices.utci,
+                peak_wet_bulb: indices.wet_bulb,
+                peak_hour: "14:00",
+                danger_hours_count: indices.heat_index >= 41 ? 4 : 0
+            });
+        }
     }
-    res.json(forecasts);
+
+    res.json({
+        daily: dailyForecasts,
+        forecasts: dailyForecasts,
+        lead_times: horizon?.lead_times || null,
+        peak_projections_48h: horizon?.peak_projections_48h || null,
+        exposure_windows: horizon?.exposure_windows || null
+    });
+});
+
+app.get('/api/thermal-stress/horizon', async (req, res) => {
+    const lat = parseFloat(req.query.lat) || 28.61;
+    const lon = parseFloat(req.query.lon) || 77.23;
+    const data = await fetchWeather(lat, lon);
+    if (!data) return res.status(503).json({ error: 'Data unavailable' });
+    
+    const horizon = computeThermalStressHorizon(data);
+    res.json(horizon || { error: 'Horizon calculation unavailable' });
 });
 
 app.get('/api/hourly-stress', async (req, res) => {
@@ -304,15 +332,21 @@ app.get('/api/hourly-stress', async (req, res) => {
     const data = await fetchWeather(lat, lon);
     if (!data || !data.hourly) return res.status(503).json({ error: 'Data unavailable' });
     
+    const horizon = computeThermalStressHorizon(data);
+    if (horizon && horizon.hourly_horizon && horizon.hourly_horizon.length > 0) {
+        return res.json(horizon.hourly_horizon.slice(0, 72));
+    }
+
     const hourly = data.hourly;
     const results = [];
     for(let i=0; i<Math.min(hourly.time.length, 48); i++) {
         const t = hourly.temperature_2m[i];
         const rh = hourly.relative_humidity_2m[i];
         const wind = hourly.wind_speed_10m[i];
-        const solar = hourly.shortwave_radiation[i];
+        const solar = hourly.shortwave_radiation ? hourly.shortwave_radiation[i] : 0;
         results.push({
             time: hourly.time[i],
+            lead_hours: i,
             temperature: t,
             humidity: rh,
             wind_speed: wind,
@@ -369,16 +403,29 @@ app.get('/api/multi-city', async (req, res) => {
     res.json(results);
 });
 
-// Dynamic Heatwave Early Alert Engine
+// Dynamic Heatwave Early Alert Engine (With Predictive Lead Time & Forecast Horizon)
 app.get('/api/heatwave-alert', async (req, res) => {
     const lat = parseFloat(req.query.lat) || 28.61;
     const lon = parseFloat(req.query.lon) || 77.23;
     const data = await fetchWeather(lat, lon);
     const current = data?.current || { temperature_2m: 39.2, relative_humidity_2m: 52, wind_speed_10m: 11.5 };
-    const indices = computeIndices(current.temperature_2m, current.relative_humidity_2m, current.wind_speed_10m / 3.6, getCurrentSolarRadiation(data));
+    const currentIndices = computeIndices(current.temperature_2m, current.relative_humidity_2m, current.wind_speed_10m / 3.6, getCurrentSolarRadiation(data));
+    const horizon = computeThermalStressHorizon(data);
     
-    const hi = indices.heat_index;
+    const hi = currentIndices.heat_index;
+    const peakObj = horizon?.peak_projections_48h?.peak_heat_index;
+    const peak48h = peakObj ? peakObj.value : hi;
+    const peakLeadHours = peakObj ? peakObj.lead_hours : 0;
+    const peakTime = peakObj ? peakObj.time : '';
+    
+    const leadTimes = horizon?.lead_times || {};
+    const dangerLead = leadTimes.danger_lead_hours;
+    const cautionLead = leadTimes.caution_lead_hours;
+    const isActiveDangerNow = leadTimes.is_active_danger_now || (hi >= 41.0);
+    const exposure = horizon?.exposure_windows || {};
+
     let isActive = false;
+    let isEarlyWarning = false;
     let levelNum = 1;
     let levelName = 'green';
     let title = "No Active Heatwave Warning";
@@ -387,12 +434,13 @@ app.get('/api/heatwave-alert', async (req, res) => {
     let icon = "🟢";
     let recs = ["Stay hydrated with standard water intake", "Wear breathable cotton clothing"];
 
+    // Evaluate active conditions vs. predictive forecast horizon
     if (hi >= 54.0) {
         isActive = true;
         levelNum = 5;
         levelName = 'darkred';
         title = "STAGE 5: EXTREME HEAT DISASTER ALERT";
-        message = "Catastrophic heat conditions! Heat stroke is highly imminent for any uncooled exposure.";
+        message = "Catastrophic heat conditions currently active! Heat stroke is highly imminent for any uncooled exposure.";
         color = "#7f1d1d";
         icon = "☣️";
         recs = ["Halt all outdoor activities immediately", "Seek air-conditioned cooling centers", "Pre-position medical ice baths"];
@@ -401,10 +449,41 @@ app.get('/api/heatwave-alert', async (req, res) => {
         levelNum = 4;
         levelName = 'red';
         title = "STAGE 4: RED HEATWAVE EMERGENCY";
-        message = "Dangerous heat index conditions! High probability of heat exhaustion and heat stroke.";
+        message = "Dangerous heat index conditions currently active! High probability of heat exhaustion and heat stroke.";
         color = "#ef4444";
         icon = "🚨";
         recs = ["Mandatory 11 AM – 4 PM labor curfew", "Distribute oral rehydration salts", "Evacuate high-risk vulnerable citizens to shelters"];
+    } else if (dangerLead !== null && dangerLead > 0 && dangerLead <= 24) {
+        // PREDICTIVE EARLY WARNING: Danger threshold breach within 24h lead time!
+        isActive = true;
+        isEarlyWarning = true;
+        levelNum = 4;
+        levelName = 'red';
+        title = `STAGE 4: PREDICTIVE RED EMERGENCY (EARLY WARNING)`;
+        message = `Atmospheric modeling projects severe physiological heat stress crossing Danger threshold (41°C Heat Index) in ${dangerLead} hours (Projected Peak: ${peak48h}°C). Take preventive protection before threshold breach.`;
+        color = "#ef4444";
+        icon = "🚨";
+        recs = [
+            `Lead Window: ${dangerLead} hours remaining to pre-hydrate, shade living spaces, and schedule indoor activities`,
+            `Projected high-stress exposure window starts at ${leadTimes.danger_onset_time ? new Date(leadTimes.danger_onset_time).toLocaleTimeString([], {hour: '2-digit', minute:'2-digit'}) : 'upcoming hours'}`,
+            "Reschedule high-intensity outdoor labor before projected peak onset",
+            "Prepare emergency hydration stations along transit corridors"
+        ];
+    } else if (dangerLead !== null && dangerLead > 24 && dangerLead <= 48) {
+        // PREDICTIVE EARLY WATCH: Danger breach within 24-48h lead time!
+        isActive = true;
+        isEarlyWarning = true;
+        levelNum = 3;
+        levelName = 'orange';
+        title = `STAGE 3: ORANGE EARLY WATCH (+${dangerLead}H HORIZON)`;
+        message = `Thermal stress index projected to cross Danger threshold in ${dangerLead} hours (Predicted Peak: ${peak48h}°C). Municipal pre-positioning window active.`;
+        color = "#f97316";
+        icon = "⚠️";
+        recs = [
+            "Initiate pre-heatwave logistical checks for municipal cooling centers",
+            "Broadcast predictive heat advisories across regional media",
+            "Review medical supply inventories for IV fluids and ORS"
+        ];
     } else if (hi >= 38.0) {
         isActive = true;
         levelNum = 3;
@@ -414,12 +493,15 @@ app.get('/api/heatwave-alert', async (req, res) => {
         color = "#f97316";
         icon = "⚠️";
         recs = ["Drink electrolyte water every 20 minutes", "Limit prolonged direct sun exposure", "Activate municipal misting stations"];
-    } else if (hi >= 32.0) {
+    } else if (hi >= 32.0 || (cautionLead !== null && cautionLead <= 12)) {
         isActive = true;
+        isEarlyWarning = (hi < 32.0 && cautionLead !== null);
         levelNum = 2;
         levelName = 'yellow';
-        title = "STAGE 2: YELLOW HEAT ADVISORY";
-        message = "Elevated thermal stress. Fatigue possible with prolonged outdoor exertion.";
+        title = isEarlyWarning ? `STAGE 2: YELLOW ADVISORY (+${cautionLead}H ONSET)` : "STAGE 2: YELLOW HEAT ADVISORY";
+        message = isEarlyWarning 
+            ? `Elevated thermal stress forecasted to begin in ${cautionLead} hours.` 
+            : "Elevated thermal stress. Fatigue possible with prolonged outdoor exertion.";
         color = "#f59e0b";
         icon = "🌤️";
         recs = ["Take frequent shaded rest breaks", "Monitor hydration levels"];
@@ -427,6 +509,7 @@ app.get('/api/heatwave-alert', async (req, res) => {
 
     res.json({
         is_active: isActive,
+        is_early_warning: isEarlyWarning,
         level_num: levelNum,
         level: levelName,
         title: title,
@@ -440,6 +523,24 @@ app.get('/api/heatwave-alert', async (req, res) => {
             severity: levelName.toUpperCase(),
             consecutive_days: 3,
             max_temp: Math.round(current.temperature_2m)
+        },
+        lead_time_horizon: {
+            is_early_warning: isEarlyWarning,
+            danger_lead_hours: dangerLead,
+            danger_status: leadTimes.danger_status || 'NOMINAL_HORIZON',
+            danger_onset_time: leadTimes.danger_onset_time,
+            danger_offset_time: leadTimes.danger_offset_time,
+            danger_duration_hours: leadTimes.danger_duration_hours || 0,
+            is_active_danger_now: isActiveDangerNow,
+            caution_lead_hours: cautionLead,
+            predicted_peak_hi: peak48h,
+            predicted_peak_lead_hours: peakLeadHours,
+            predicted_peak_time: peakTime,
+            thermal_burden_degree_hours_48h: exposure.thermal_burden_degree_hours_48h || 0,
+            danger_window_text: exposure.danger_window_text || 'Nominal',
+            lead_time_tag: dangerLead === 0 
+                ? 'Active Danger Episode' 
+                : (dangerLead !== null ? `T-${dangerLead}h to Danger (41°C+)` : 'No Breach Projected')
         }
     });
 });

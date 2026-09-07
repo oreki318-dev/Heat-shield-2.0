@@ -163,3 +163,260 @@ export function computeIndices(T_c, RH, wind_speed_ms = 1.0, solar_radiation_wm2
         }
     };
 }
+
+/**
+ * Biometeorological Forecast Horizon Engine
+ * Projects full thermal stress indices (Heat Index, WBGT, UTCI, Wet-Bulb) forward
+ * across hourly (48H / 7-Day) timelines to compute true predictive Lead Time.
+ */
+export function computeThermalStressHorizon(weatherData) {
+    if (!weatherData) return null;
+    const hourly = weatherData.hourly || {};
+    const times = hourly.time || [];
+    const temps = hourly.temperature_2m || [];
+    const rhs = hourly.relative_humidity_2m || [];
+    const winds = hourly.wind_speed_10m || [];
+    const solars = hourly.shortwave_radiation || [];
+    const codes = hourly.weather_code || [];
+
+    const numHours = Math.min(times.length, 168);
+    if (numHours === 0) return null;
+
+    const hourlyPoints = [];
+    const nowMs = Date.now();
+
+    for (let i = 0; i < numHours; i++) {
+        const timeStr = times[i];
+        const t_c = temps[i] ?? 35.0;
+        const rh = rhs[i] ?? 50.0;
+        const wind_kmh = winds[i] ?? 10.0;
+        const wind_ms = Number((wind_kmh / 3.6).toFixed(1));
+        
+        let solar = 0;
+        if (solars && solars.length > i && solars[i] != null) {
+            solar = solars[i];
+        } else {
+            const d = new Date(timeStr);
+            const hr = d.getHours();
+            if (hr >= 6 && hr <= 18) {
+                solar = Math.round(750 * Math.sin(((hr - 6) / 12) * Math.PI));
+            }
+        }
+
+        const indices = computeIndices(t_c, rh, wind_ms, solar);
+        const ptTime = new Date(timeStr).getTime();
+        const leadHours = Math.max(0, Math.round((ptTime - nowMs) / (1000 * 60 * 60)));
+
+        const isDanger = indices.heat_index >= 41.0 || indices.wbgt >= 32.0 || indices.utci >= 38.0;
+        const isCaution = indices.heat_index >= 32.0 || indices.wbgt >= 28.0 || indices.utci >= 32.0;
+        const isExtreme = indices.heat_index >= 54.0 || indices.utci >= 46.0 || indices.wet_bulb >= 35.0;
+
+        hourlyPoints.push({
+            time: timeStr,
+            lead_hours: i,
+            hours_from_now: leadHours,
+            temperature: t_c,
+            humidity: rh,
+            wind_speed: wind_kmh,
+            wind_speed_ms: wind_ms,
+            solar_radiation: solar,
+            weather_code: codes[i] || 0,
+            indices,
+            risk_category: indices.classifications.heat_index.category,
+            risk_level: indices.classifications.heat_index.level,
+            risk_color: indices.classifications.heat_index.color,
+            is_caution: isCaution,
+            is_danger: isDanger,
+            is_extreme: isExtreme
+        });
+    }
+
+    // 1. Lead Time to Danger Threshold (HI >= 41°C or WBGT >= 32°C)
+    let dangerLeadHours = null;
+    let dangerStatus = 'NOMINAL_HORIZON';
+    let dangerOnsetTime = null;
+    let dangerOffsetTime = null;
+    let dangerDurationHours = 0;
+    let isActiveDangerNow = hourlyPoints[0]?.is_danger || false;
+
+    if (isActiveDangerNow) {
+        dangerLeadHours = 0;
+        dangerStatus = 'ACTIVE_NOW';
+        dangerOnsetTime = hourlyPoints[0].time;
+        // Count consecutive active danger hours
+        let dCount = 0;
+        for (let j = 0; j < hourlyPoints.length; j++) {
+            if (hourlyPoints[j].is_danger) {
+                dCount++;
+            } else {
+                dangerOffsetTime = hourlyPoints[j].time;
+                break;
+            }
+        }
+        dangerDurationHours = dCount;
+    } else {
+        // Look ahead for first danger breach
+        for (let j = 1; j < hourlyPoints.length; j++) {
+            if (hourlyPoints[j].is_danger) {
+                dangerLeadHours = hourlyPoints[j].lead_hours;
+                dangerStatus = 'PENDING_BREACH';
+                dangerOnsetTime = hourlyPoints[j].time;
+                // Measure window duration
+                let dCount = 0;
+                for (let k = j; k < hourlyPoints.length; k++) {
+                    if (hourlyPoints[k].is_danger) {
+                        dCount++;
+                    } else {
+                        dangerOffsetTime = hourlyPoints[k].time;
+                        break;
+                    }
+                }
+                dangerDurationHours = dCount;
+                break;
+            }
+        }
+    }
+
+    // 2. Lead Time to Caution Threshold (HI >= 32°C)
+    let cautionLeadHours = null;
+    let cautionStatus = 'NOMINAL_HORIZON';
+    let cautionOnsetTime = null;
+    if (hourlyPoints[0]?.is_caution) {
+        cautionLeadHours = 0;
+        cautionStatus = 'ACTIVE_NOW';
+        cautionOnsetTime = hourlyPoints[0].time;
+    } else {
+        for (let j = 1; j < hourlyPoints.length; j++) {
+            if (hourlyPoints[j].is_caution) {
+                cautionLeadHours = hourlyPoints[j].lead_hours;
+                cautionStatus = 'PENDING_BREACH';
+                cautionOnsetTime = hourlyPoints[j].time;
+                break;
+            }
+        }
+    }
+
+    // 3. 48-Hour Peak Projections
+    const h48 = hourlyPoints.slice(0, Math.min(48, hourlyPoints.length));
+    let peakHI = h48[0] || null;
+    let peakWBGT = h48[0] || null;
+    let peakUTCI = h48[0] || null;
+    let peakTw = h48[0] || null;
+    let totalDangerHours48h = 0;
+    let thermalBurdenDegreeHours48h = 0;
+
+    h48.forEach(pt => {
+        if (!peakHI || pt.indices.heat_index > peakHI.indices.heat_index) peakHI = pt;
+        if (!peakWBGT || pt.indices.wbgt > peakWBGT.indices.wbgt) peakWBGT = pt;
+        if (!peakUTCI || pt.indices.utci > peakUTCI.indices.utci) peakUTCI = pt;
+        if (!peakTw || pt.indices.wet_bulb > peakTw.indices.wet_bulb) peakTw = pt;
+        if (pt.is_danger) totalDangerHours48h++;
+        if (pt.indices.heat_index > 40.0) {
+            thermalBurdenDegreeHours48h += (pt.indices.heat_index - 40.0);
+        }
+    });
+
+    // 4. Group into Calendar Days for 7-Day Projected Indices
+    const dailyMap = new Map();
+    hourlyPoints.forEach(pt => {
+        const dayKey = pt.time.split('T')[0];
+        if (!dailyMap.has(dayKey)) {
+            dailyMap.set(dayKey, []);
+        }
+        dailyMap.get(dayKey).push(pt);
+    });
+
+    const dailyForecasts = [];
+    dailyMap.forEach((points, dayKey) => {
+        let maxT = -999, minT = 999;
+        let dayPeakHI = points[0];
+        let dayPeakWBGT = points[0];
+        let dayPeakUTCI = points[0];
+        let dayPeakTw = points[0];
+        let dangerHrs = 0;
+        let cautionHrs = 0;
+
+        points.forEach(p => {
+            if (p.temperature > maxT) maxT = p.temperature;
+            if (p.temperature < minT) minT = p.temperature;
+            if (p.indices.heat_index > dayPeakHI.indices.heat_index) dayPeakHI = p;
+            if (p.indices.wbgt > dayPeakWBGT.indices.wbgt) dayPeakWBGT = p;
+            if (p.indices.utci > dayPeakUTCI.indices.utci) dayPeakUTCI = p;
+            if (p.indices.wet_bulb > dayPeakTw.indices.wet_bulb) dayPeakTw = p;
+            if (p.is_danger) dangerHrs++;
+            if (p.is_caution) cautionHrs++;
+        });
+
+        const peakDate = new Date(dayPeakHI.time);
+        const peakHourStr = peakDate.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit', hour12: false });
+
+        dailyForecasts.push({
+            date: dayKey,
+            max_temp: Number(maxT.toFixed(1)),
+            min_temp: Number(minT.toFixed(1)),
+            weather_code: dayPeakHI.weather_code,
+            peak_heat_index: dayPeakHI.indices.heat_index,
+            peak_wbgt: dayPeakWBGT.indices.wbgt,
+            peak_utci: dayPeakUTCI.indices.utci,
+            peak_wet_bulb: dayPeakTw.indices.wet_bulb,
+            peak_hour: peakHourStr,
+            danger_hours_count: dangerHrs,
+            caution_hours_count: cautionHrs,
+            risk_level: dayPeakHI.risk_category,
+            risk_color: dayPeakHI.risk_color,
+            risk_summary: dayPeakHI.risk_category,
+            level_num: dayPeakHI.risk_level
+        });
+    });
+
+    return {
+        hourly_horizon: hourlyPoints,
+        daily_forecasts: dailyForecasts,
+        lead_times: {
+            danger_lead_hours: dangerLeadHours,
+            danger_status: dangerStatus,
+            danger_onset_time: dangerOnsetTime,
+            danger_offset_time: dangerOffsetTime,
+            danger_duration_hours: dangerDurationHours,
+            is_active_danger_now: isActiveDangerNow,
+            caution_lead_hours: cautionLeadHours,
+            caution_status: cautionStatus,
+            caution_onset_time: cautionOnsetTime
+        },
+        peak_projections_48h: {
+            peak_heat_index: {
+                value: peakHI?.indices?.heat_index ?? 0,
+                time: peakHI?.time ?? '',
+                lead_hours: peakHI?.lead_hours ?? 0,
+                category: peakHI?.risk_category ?? 'Normal',
+                color: peakHI?.risk_color ?? '#10b981'
+            },
+            peak_wbgt: {
+                value: peakWBGT?.indices?.wbgt ?? 0,
+                time: peakWBGT?.time ?? '',
+                lead_hours: peakWBGT?.lead_hours ?? 0
+            },
+            peak_utci: {
+                value: peakUTCI?.indices?.utci ?? 0,
+                time: peakUTCI?.time ?? '',
+                lead_hours: peakUTCI?.lead_hours ?? 0
+            },
+            peak_wet_bulb: {
+                value: peakTw?.indices?.wet_bulb ?? 0,
+                time: peakTw?.time ?? '',
+                lead_hours: peakTw?.lead_hours ?? 0
+            }
+        },
+        exposure_windows: {
+            total_danger_hours_48h: totalDangerHours48h,
+            thermal_burden_degree_hours_48h: Number(thermalBurdenDegreeHours48h.toFixed(1)),
+            has_danger_window: dangerLeadHours !== null,
+            danger_window_text: dangerLeadHours === 0 
+                ? `Active Danger Episode (${dangerDurationHours}h continuous)`
+                : (dangerLeadHours !== null 
+                    ? `Predicted in +${dangerLeadHours}h (${dangerDurationHours}h continuous duration)`
+                    : 'No Danger Threshold Breach in 48H')
+        }
+    };
+}
+

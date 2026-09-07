@@ -32,7 +32,7 @@
   <div class="app-shell" id="app-shell">
 
     <!-- Main Workspace Frame -->
-    <div class="app-main-area" id="app-main-area">
+<div class="app-main-area" id="app-main-area">
 
       <!-- Top System Status Header -->
       <div class="system-status-bar">
@@ -230,6 +230,9 @@
         </div>
       </nav>
 
+
+      
+
       <!-- Global Hotspot Stations Bar (National & International Benchmarks) -->
       <section class="stations-bar-section">
         <div class="stations-container">
@@ -261,49 +264,231 @@
           <!-- Hero Threat Advisory Header Banner -->
           <section class="hero-threat-section">
             <div id="alert-banner" class="hero-threat-card alert-green">
+              <!-- Top HUD Directive Ribbon -->
+              <div class="threat-hud-topbar">
+                <div class="hud-topbar-left">
+                  <span class="hud-pulse-radar"></span>
+                  <span class="hud-directive-tag">HEATSHIELD OPS // ACTIVE DEFENSE DIRECTIVE</span>
+                  <span class="hud-divider">|</span>
+                  <span class="hud-code-tag">STAGE-02 // ELEVATED THERMAL MONITORING</span>
+                </div>
+                <div class="hud-topbar-right">
+                  <span class="hud-status-indicator">SENSOR ARRAY ONLINE</span>
+                  <span class="hud-live-tag"><span class="hud-live-dot"></span>REAL-TIME SYNC</span>
+                </div>
+              </div>
+
               <div class="threat-card-inner">
-                <!-- Threat Level Badge -->
-                <div class="threat-level-column">
-                  <div class="threat-radar-box" id="radar-ring">
-                    <span class="threat-radar-dot" id="alert-icon">
-                      <svg viewBox="0 0 24 24" width="16" height="16" stroke="currentColor" stroke-width="2" fill="none"><circle cx="12" cy="12" r="10"/><path d="M12 8v4M12 16h.01"/></svg>
+                <!-- Col 1: Visual Gauge & Severity Level (col-span-3) -->
+                <div class="threat-level-column" id="threat-level-col">
+                  <div class="threat-gauge-header">
+                    <span class="gauge-header-title">SEVERITY INDEX</span>
+                    <span class="gauge-header-code">MET-48</span>
+                  </div>
+
+                  <div class="threat-gauge-wrapper">
+                    <div class="threat-radial-gauge" id="radar-ring">
+                      <svg class="gauge-svg" viewBox="0 0 150 150" width="150" height="150">
+                        <defs>
+                          <filter id="gauge-glow" x="-25%" y="-25%" width="150%" height="150%">
+                            <feGaussianBlur stdDeviation="4" result="blur" />
+                            <feComposite in="SourceGraphic" in2="blur" operator="over" />
+                          </filter>
+                          <linearGradient id="gauge-amber-grad" x1="0%" y1="100%" x2="100%" y2="0%">
+                            <stop offset="0%" stop-color="#f59e0b" />
+                            <stop offset="100%" stop-color="#fbbf24" />
+                          </linearGradient>
+                        </defs>
+
+                        <!-- Outer 4-Tier Range Guide Arcs (Green, Amber, Orange, Red) -->
+                        <circle cx="75" cy="75" r="62" fill="none" stroke="rgba(16, 185, 129, 0.22)" stroke-width="3" stroke-dasharray="70 270" stroke-dashoffset="-45" stroke-linecap="round"/>
+                        <circle cx="75" cy="75" r="62" fill="none" stroke="rgba(234, 179, 8, 0.22)" stroke-width="3" stroke-dasharray="70 270" stroke-dashoffset="-120" stroke-linecap="round"/>
+                        <circle cx="75" cy="75" r="62" fill="none" stroke="rgba(249, 115, 22, 0.22)" stroke-width="3" stroke-dasharray="70 270" stroke-dashoffset="-195" stroke-linecap="round"/>
+                        <circle cx="75" cy="75" r="62" fill="none" stroke="rgba(239, 68, 68, 0.22)" stroke-width="3" stroke-dasharray="70 270" stroke-dashoffset="-270" stroke-linecap="round"/>
+
+                        <!-- Inactive Full Track Arc (270 deg) -->
+                        <circle class="gauge-bg-track" cx="75" cy="75" r="54" fill="none" stroke="rgba(255, 255, 255, 0.07)" stroke-width="9" stroke-dasharray="254.5 84.8" stroke-dashoffset="-42.4" stroke-linecap="round"/>
+
+                        <!-- Active Accent Arc -->
+                        <circle class="gauge-active-arc" id="gauge-arc" cx="75" cy="75" r="54" fill="none" stroke="url(#gauge-amber-grad)" stroke-width="9" stroke-dasharray="127.2 212" stroke-dashoffset="-42.4" stroke-linecap="round" filter="url(#gauge-glow)"/>
+
+                        <!-- Calibrated HUD Reticle Ring & Radial Ticks -->
+                        <circle cx="75" cy="75" r="42" fill="none" stroke="rgba(255, 255, 255, 0.08)" stroke-width="1.2" stroke-dasharray="2 7"/>
+                        <circle cx="75" cy="75" r="28" fill="none" stroke="rgba(255, 255, 255, 0.04)" stroke-width="1"/>
+                      </svg>
+
+                      <!-- Center Gauge Readout HUD -->
+                      <div class="gauge-center-content">
+                        <span class="gauge-tier-kicker" id="gauge-tier-kicker">LEVEL 2 OF 4</span>
+                        <span class="gauge-main-val pulse-glow" id="gauge-main-val">STAGE 2</span>
+                        <span class="gauge-sub-temp" id="gauge-sub-temp">35.3°C</span>
+                        <span class="gauge-sub-caption">HEAT INDEX</span>
+                      </div>
+                    </div>
+                  </div>
+
+                  <!-- Pinned Status Badge -->
+                  <div class="threat-badge-container">
+                    <span class="threat-level-tag" id="threat-level-tag">
+                      <span class="badge-beacon-dot"></span>
+                      <span>Stage 2: Yellow Heat Advisory</span>
                     </span>
                   </div>
-                  <span class="threat-level-tag" id="threat-level-tag">Stage 1 • Normal Conditions</span>
+                  <div class="threat-matrix-legend">
+                    <span class="legend-tick tick-green">L1</span>
+                    <span class="legend-tick tick-yellow active">L2</span>
+                    <span class="legend-tick tick-orange">L3</span>
+                    <span class="legend-tick tick-red">L4</span>
+                  </div>
                 </div>
 
-                <!-- Threat Narrative & Meta -->
+                <!-- Col 2: Advisory Details & Operational Horizon (col-span-5) -->
                 <div class="threat-content-column">
+                  <!-- Header Row: Metadata Chips -->
                   <div class="threat-meta-row">
-                    <div class="meta-item" id="location-pill">
-                      <svg viewBox="0 0 24 24" width="12" height="12" stroke="currentColor" stroke-width="1.8" fill="none"><path d="M21 10c0 7-9 13-9 13s-9-6-9-13a9 9 0 0 1 18 0z"/><circle cx="12" cy="10" r="3"/></svg>
-                      <span id="location-name">Synchronizing observation station...</span>
+                    <div class="meta-item meta-item-loc" id="location-pill">
+                      <svg viewBox="0 0 24 24" width="13" height="13" stroke="currentColor" stroke-width="2" fill="none"><path d="M21 10c0 7-9 13-9 13s-9-6-9-13a9 9 0 0 1 18 0z"/><circle cx="12" cy="10" r="3"/></svg>
+                      <span id="location-name">Gandhinagar, India</span>
                     </div>
-                    <div class="meta-item" id="time-pill">
-                      <svg viewBox="0 0 24 24" width="12" height="12" stroke="currentColor" stroke-width="1.8" fill="none"><circle cx="12" cy="12" r="10"/><polyline points="12 6 12 12 16 14"/></svg>
-                      <span id="update-time">Live Telemetry</span>
+                    <div class="meta-item meta-item-time" id="time-pill">
+                      <svg viewBox="0 0 24 24" width="13" height="13" stroke="currentColor" stroke-width="2" fill="none"><circle cx="12" cy="12" r="10"/><polyline points="12 6 12 12 16 14"/></svg>
+                      <span id="update-time">Live: 20:20 IST</span>
                     </div>
                     <div class="meta-item heatwave-badge-pill" id="heatwave-badge">
-                      <span class="hw-status-inner">Checking Atmospheric Stability</span>
+                      <svg viewBox="0 0 24 24" width="13" height="13" stroke="currentColor" stroke-width="2" fill="none"><path d="M8.5 14.5A2.5 2.5 0 0 0 11 12c0-1.38-.5-2-1-3-1.072-2.143-.224-4.054 2-6 .5 2.5 2 4.9 4 6.5 2 1.6 3 3.5 3 5.5a7 7 0 1 1-14 0c0-1.153.433-2.294 1-3a2.5 2.5 0 0 0 2.5 2.5z"/></svg>
+                      <span class="hw-status-inner">3d Streak</span>
+                    </div>
+                    <div class="meta-item meta-item-risk">
+                      <span class="risk-pulse-dot"></span>
+                      <span>RISK: ELEVATED</span>
                     </div>
                   </div>
 
-                  <h2 id="alert-title" class="threat-heading">Atmospheric Boundary Telemetry Active</h2>
-                  <p id="alert-message" class="threat-desc">
-                    Multi-node biometeorological observations online. Real-time convective dissipation, vapor pressure deficit, and universal thermal climate stress computed.
-                  </p>
+                  <!-- Advisory Title & Real-World Impact -->
+                  <div class="threat-text-block">
+                    <div class="threat-heading-wrap">
+                      <span class="threat-accent-bar"></span>
+                      <h2 id="alert-title" class="threat-heading">STAGE 2: YELLOW HEAT ADVISORY</h2>
+                    </div>
+                    <p id="alert-message" class="threat-desc">Elevated thermal stress detected. Fatigue and physiological strain possible with prolonged outdoor exertion. Outdoor labor hydrations and cooling protocols recommended.</p>
+                  </div>
+
+                  <!-- 48H Horizon Panel (High-Density Cockpit Inset) -->
+                  <div class="threat-horizon-panel" id="hero-leadtime-strip">
+                    <div class="horizon-panel-header">
+                      <div class="horizon-title-tag">
+                        <svg viewBox="0 0 24 24" width="13" height="13" stroke="currentColor" stroke-width="2" fill="none"><circle cx="12" cy="12" r="10"/><polyline points="12 6 12 12 16 14"/></svg>
+                        <span>48-HOUR OPERATIONAL HORIZON</span>
+                      </div>
+                      <div class="leadtime-badge-pill" id="hero-leadtime-badge">
+                        <svg viewBox="0 0 24 24" width="13" height="13" stroke="currentColor" stroke-width="2" fill="none"><path d="M12 22s8-4 8-10V5l-8-3-8 3v7c0 6 8 10 8 10z"/><polyline points="9 12 11 14 15 10"/></svg>
+                        <span id="hero-leadtime-status">Nominal: 48H Thermal Stress Contained</span>
+                      </div>
+                    </div>
+
+                    <div class="horizon-stats-row">
+                      <div class="horizon-stat-cell">
+                        <span class="horizon-stat-label">PROJECTED PEAK</span>
+                        <div class="horizon-stat-value-row">
+                          <span class="horizon-stat-value" id="hero-leadtime-peak">37.6°C (+38h)</span>
+                        </div>
+                        <span class="horizon-stat-sub">Max Expected HI</span>
+                      </div>
+                      <div class="horizon-stat-cell">
+                        <span class="horizon-stat-label">THRESHOLD BREACH</span>
+                        <div class="horizon-stat-value-row">
+                          <span class="horizon-stat-value text-emerald" id="hero-leadtime-window">None in 48h</span>
+                        </div>
+                        <span class="horizon-stat-sub">Safe Operational Margin</span>
+                      </div>
+                      <div class="horizon-stat-cell">
+                        <span class="horizon-stat-label">THERMAL BURDEN</span>
+                        <div class="horizon-stat-value-row">
+                          <span class="horizon-stat-value text-cyan" id="hero-leadtime-burden">0 °C·hr</span>
+                        </div>
+                        <span class="horizon-stat-sub">Cumulative Heat Dosage</span>
+                      </div>
+                    </div>
+
+                    <!-- Visual Thermal Buffer Risk Meter -->
+                    <div class="horizon-buffer-track">
+                      <div class="buffer-bar-wrapper">
+                        <div class="buffer-bar-fill" style="width: 42%;"></div>
+                        <div class="buffer-marker-current" style="left: 42%;" title="Current 35.3°C"></div>
+                      </div>
+                      <div class="buffer-labels">
+                        <span>25°C Baseline</span>
+                        <span class="buffer-mid">32°C Caution</span>
+                        <span class="buffer-danger">41°C Emergency</span>
+                      </div>
+                    </div>
+                  </div>
                 </div>
 
-                <!-- Quick Numerical Threat Readouts -->
+                <!-- Col 3: Key Telemetry Metrics Grid (col-span-4) -->
                 <div class="threat-readouts-column">
-                  <div class="threat-readout-item">
-                    <span class="threat-readout-label">Heat Index</span>
-                    <span class="threat-readout-val tabular-num" id="hero-stat-hi">--</span>
+                  <div class="telemetry-micro-card" id="card-stat-hi">
+                    <div class="micro-card-header">
+                      <div class="micro-label-wrap">
+                        <svg viewBox="0 0 24 24" width="13" height="13" stroke="#fbbf24" stroke-width="2" fill="none"><path d="M14 14.76V3.5a2.5 2.5 0 0 0-5 0v11.26a4.5 4.5 0 1 0 5 0z"/></svg>
+                        <span class="micro-card-label">HEAT INDEX</span>
+                      </div>
+                      <span class="micro-status-chip chip-amber">Caution 32°+</span>
+                    </div>
+                    <div class="micro-card-body">
+                      <span class="micro-card-val text-amber tabular-num" id="hero-stat-hi">35.3°C</span>
+                    </div>
+                    <div class="micro-card-footer">
+                      <span class="micro-footer-text">Apparent human thermal load</span>
+                    </div>
                   </div>
-                  <div class="threat-readout-sep"></div>
-                  <div class="threat-readout-item">
-                    <span class="threat-readout-label">WBGT Stress</span>
-                    <span class="threat-readout-val tabular-num" id="hero-stat-wbgt">--</span>
+
+                  <div class="telemetry-micro-card" id="card-stat-wbgt">
+                    <div class="micro-card-header">
+                      <div class="micro-label-wrap">
+                        <svg viewBox="0 0 24 24" width="13" height="13" stroke="#38bdf8" stroke-width="2" fill="none"><path d="M12 2v2"/><path d="M12 20v2"/><path d="m4.93 4.93 1.41 1.41"/><path d="m17.66 17.66 1.41 1.41"/><path d="M2 12h2"/><path d="M20 12h2"/><circle cx="12" cy="12" r="5"/></svg>
+                        <span class="micro-card-label">WBGT STRESS</span>
+                      </div>
+                      <span class="micro-status-chip chip-cyan">Category 2</span>
+                    </div>
+                    <div class="micro-card-body">
+                      <span class="micro-card-val text-cyan tabular-num" id="hero-stat-wbgt">27.1°C</span>
+                    </div>
+                    <div class="micro-card-footer">
+                      <span class="micro-footer-text">Work/Rest cycle: 45m / 15m</span>
+                    </div>
+                  </div>
+
+                  <div class="telemetry-micro-card" id="card-stat-peak">
+                    <div class="micro-card-header">
+                      <div class="micro-label-wrap">
+                        <svg viewBox="0 0 24 24" width="13" height="13" stroke="#fb923c" stroke-width="2" fill="none"><polyline points="23 6 13.5 15.5 8.5 10.5 1 18"/><polyline points="17 6 23 6 23 12"/></svg>
+                        <span class="micro-card-label">PROJECTED PEAK</span>
+                      </div>
+                      <span class="micro-status-chip chip-orange">+2.3° Delta</span>
+                    </div>
+                    <div class="micro-card-body">
+                      <span class="micro-card-val text-orange tabular-num" id="hero-stat-peak">37.6°C</span>
+                    </div>
+                    <div class="micro-card-footer">
+                      <span class="micro-footer-text">Peak window: Tomorrow 14:00</span>
+                    </div>
+                  </div>
+
+                  <div class="telemetry-micro-card" id="card-stat-horizon">
+                    <div class="micro-card-header">
+                      <div class="micro-label-wrap">
+                        <svg viewBox="0 0 24 24" width="13" height="13" stroke="#34d399" stroke-width="2" fill="none"><path d="M12 22s8-4 8-10V5l-8-3-8 3v7c0 6 8 10 8 10z"/></svg>
+                        <span class="micro-card-label">DANGER HORIZON</span>
+                      </div>
+                      <span class="micro-status-chip chip-emerald">Safe Margin</span>
+                    </div>
+                    <div class="micro-card-body">
+                      <span class="micro-card-val text-emerald tabular-num" id="hero-stat-leadtime">Clear 48h</span>
+                    </div>
+                    <div class="micro-card-footer">
+                      <span class="micro-footer-text">Thermal stability index high</span>
+                    </div>
                   </div>
                 </div>
               </div>
@@ -539,9 +724,78 @@
           <h2 class="section-heading">48-Hour Thermal Trajectory &amp; 7-Day Outlook</h2>
         </div>
         <div class="timeline-controls">
+          <div class="segmented-control" id="seg-index-filter">
+            <button class="seg-btn active" id="btn-filter-all" data-series="all">All Indices</button>
+            <button class="seg-btn" id="btn-filter-hi" data-series="hi">Heat Index</button>
+            <button class="seg-btn" id="btn-filter-wbgt" data-series="wbgt">WBGT</button>
+            <button class="seg-btn" id="btn-filter-tw" data-series="tw">Wet-Bulb</button>
+          </div>
           <div class="segmented-control">
             <button class="seg-btn active" id="btn-chart-48h">48 Hours</button>
             <button class="seg-btn" id="btn-chart-24h">24 Hours</button>
+          </div>
+        </div>
+      </div>
+
+      <!-- Lead-Time Horizon & Thermal Stress Projection Bench -->
+      <div class="horizon-analytics-grid" id="horizon-analytics-grid">
+        <!-- Danger Lead Time Card -->
+        <div class="horizon-stat-card" id="card-leadtime-danger">
+          <div class="horizon-stat-header">
+            <span class="horizon-stat-label">Danger Horizon</span>
+            <span class="horizon-chip" id="horizon-danger-chip">HI ≥ 41°C / WBGT ≥ 32°C</span>
+          </div>
+          <div class="horizon-stat-main">
+            <span class="horizon-stat-val tabular-num" id="horizon-danger-val">--</span>
+            <span class="horizon-stat-status" id="horizon-danger-status">Calculating...</span>
+          </div>
+          <div class="horizon-stat-footer" id="horizon-danger-footer">
+            <span>Projected breach onset window</span>
+          </div>
+        </div>
+
+        <!-- Projected Peak Stress Card -->
+        <div class="horizon-stat-card" id="card-leadtime-peak">
+          <div class="horizon-stat-header">
+            <span class="horizon-stat-label">Projected 48H Peak</span>
+            <span class="horizon-chip" id="horizon-peak-chip">Biomet Peak</span>
+          </div>
+          <div class="horizon-stat-main">
+            <span class="horizon-stat-val tabular-num" id="horizon-peak-val">--</span>
+            <span class="horizon-stat-status" id="horizon-peak-time">--</span>
+          </div>
+          <div class="horizon-stat-footer" id="horizon-peak-footer">
+            <span>Predicted maximum physiological thermal stress</span>
+          </div>
+        </div>
+
+        <!-- High-Risk Exposure Window Card -->
+        <div class="horizon-stat-card" id="card-leadtime-window">
+          <div class="horizon-stat-header">
+            <span class="horizon-stat-label">Acute Stress Window</span>
+            <span class="horizon-chip" id="horizon-window-chip">Duration</span>
+          </div>
+          <div class="horizon-stat-main">
+            <span class="horizon-stat-val tabular-num" id="horizon-window-val">--</span>
+            <span class="horizon-stat-status" id="horizon-window-desc">Continuous Danger</span>
+          </div>
+          <div class="horizon-stat-footer" id="horizon-window-footer">
+            <span>Consecutive hours exceeding safety thresholds</span>
+          </div>
+        </div>
+
+        <!-- 48H Accumulated Thermal Burden Card -->
+        <div class="horizon-stat-card" id="card-leadtime-burden">
+          <div class="horizon-stat-header">
+            <span class="horizon-stat-label">Accumulated Thermal Load</span>
+            <span class="horizon-chip" id="horizon-burden-chip">Degree·Hours</span>
+          </div>
+          <div class="horizon-stat-main">
+            <span class="horizon-stat-val tabular-num" id="horizon-burden-val">--</span>
+            <span class="horizon-stat-status" id="horizon-burden-unit">°C·hr load</span>
+          </div>
+          <div class="horizon-stat-footer" id="horizon-burden-footer">
+            <span>Integrated thermal strain above 40°C threshold</span>
           </div>
         </div>
       </div>
