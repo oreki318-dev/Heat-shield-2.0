@@ -24,7 +24,10 @@ const state = {
   alertData: null,
   hourlyData: null,
   multiCityData: null,
-  isLoading: false
+  isLoading: false,
+  selectedStrainModel: 'heat_index',
+  isGaugeSimulated: false,
+  simulatedValue: null
 };
 
 async function safeJson(res) {
@@ -81,10 +84,12 @@ async function initApp() {
   if (navigator.geolocation) {
     navigator.geolocation.getCurrentPosition(
       async (pos) => {
-        state.lat = pos.coords.latitude;
-        state.lon = pos.coords.longitude;
-        state.locationName = await reverseGeocode(state.lat, state.lon);
-        loadAllDashboardData();
+        if (pos && pos.coords && typeof pos.coords.latitude === 'number' && !isNaN(pos.coords.latitude)) {
+          state.lat = pos.coords.latitude;
+          state.lon = pos.coords.longitude;
+          state.locationName = await reverseGeocode(state.lat, state.lon);
+          loadAllDashboardData();
+        }
       },
       () => {
         // Geolocation denied or unavailable; default data is already loaded
@@ -203,6 +208,9 @@ function setupEventListeners() {
       }
     });
   }
+
+  // Biometeorological Strain Gauge Wheel interactive controller
+  initStrainGaugeWheelInteraction();
 }
 
 // ========== LOCATION SERVICES ==========
@@ -239,10 +247,12 @@ async function handleGeolocate() {
   setLoadingState(true);
   navigator.geolocation.getCurrentPosition(
     async (pos) => {
-      const lat = pos.coords.latitude;
-      const lon = pos.coords.longitude;
-      const name = await reverseGeocode(lat, lon);
-      selectLocation(lat, lon, name);
+      if (pos && pos.coords && typeof pos.coords.latitude === 'number' && !isNaN(pos.coords.latitude)) {
+        const lat = pos.coords.latitude;
+        const lon = pos.coords.longitude;
+        const name = await reverseGeocode(lat, lon);
+        selectLocation(lat, lon, name);
+      }
       setLoadingState(false);
     },
     (err) => {
@@ -254,6 +264,8 @@ async function handleGeolocate() {
 }
 
 function selectLocation(lat, lon, name) {
+  if (typeof lat !== 'number' || isNaN(lat)) lat = DEFAULT_LAT;
+  if (typeof lon !== 'number' || isNaN(lon)) lon = DEFAULT_LON;
   state.lat = lat;
   state.lon = lon;
   state.locationName = name || `${lat.toFixed(2)}°, ${lon.toFixed(2)}°`;
@@ -600,7 +612,7 @@ function updateHeroAlertBanner(alert) {
   // Recommendations Checklist
   const recContainer = document.getElementById('recommendations-list');
   if (recContainer && alert.recommendations && alert.recommendations.length > 0) {
-    recContainer.innerHTML = '<ul>' + alert.recommendations.map(r => `<li>${r}</li>`).join('') + '</ul>';
+    recContainer.innerHTML = '<ul>' + alert.recommendations.map(r => `<li><div>${r}</div></li>`).join('') + '</ul>';
   }
 
   // Vulnerable Populations Guidance
@@ -608,19 +620,170 @@ function updateHeroAlertBanner(alert) {
   if (vulContainer && alert.vulnerable_populations && alert.vulnerable_populations.length > 0) {
     vulContainer.innerHTML = '<ul>' + alert.vulnerable_populations.map(g => `
       <li>
-        <div class="vulnerable-group-title">
-          <svg viewBox="0 0 24 24" width="14" height="14" stroke="#f59e0b" stroke-width="2" fill="none"><circle cx="12" cy="12" r="10"/><line x1="12" y1="8" x2="12" y2="12"/><line x1="12" y1="16" x2="12.01" y2="16"/></svg>
-          <span>${g.group}</span>
+        <svg viewBox="0 0 24 24" width="18" height="18" stroke="#f59e0b" stroke-width="2" fill="none" style="flex-shrink:0; margin-top:2px;"><circle cx="12" cy="12" r="10"/><line x1="12" y1="8" x2="12" y2="12"/><line x1="12" y1="16" x2="12.01" y2="16"/></svg>
+        <div style="flex:1;">
+          <div class="vulnerable-group-title">
+            <span>${g.group}</span>
+          </div>
+          <div class="vulnerable-group-desc">${g.advice}</div>
         </div>
-        <div class="vulnerable-group-desc">${g.advice}</div>
       </li>
     `).join('') + '</ul>';
   }
 }
 
-// ========== 3. THERMAL STRESS PANEL & GAUGE ==========
+// ========== 3. THERMAL STRESS PANEL & BIOMETEOROLOGICAL STRAIN GAUGE WHEEL ==========
+
+const STRAIN_MODELS = {
+  heat_index: {
+    id: 'heat_index',
+    name: 'Heat Index',
+    shortName: 'Heat Index',
+    fullName: 'NOAA Heat Index',
+    sub: 'NOAA Multi-Polynomial Steadman Model',
+    cardId: 'card-idx-hi',
+    btnId: 'btn-model-hi',
+    minC: 20,
+    maxC: 60,
+    minF: 68,
+    maxF: 140,
+    tickStepsC: [20, 30, 40, 50, 60],
+    tickStepsF: [68, 86, 104, 122, 140],
+    defaultVal: 28,
+    classify: (valC) => {
+      if (valC < 27.0) return { category: 'Normal', color: '#10b981', impact: 'Thermo-Equilibrium', hydration: '250 mL/h', workRest: 'Continuous', statement: 'Thermal equilibrium maintained. Standard evaporative heat dissipation with minimal cardiac strain.' };
+      if (valC < 32.0) return { category: 'Caution', color: '#eab308', impact: 'Mild Exertion', hydration: '500 mL/h', workRest: '50m / 10m', statement: 'Mild thermoregulatory strain. Prolonged physical exertion may induce fatigue and early dehydration.' };
+      if (valC < 41.0) return { category: 'Extreme Caution', color: '#f97316', impact: 'Moderate Strain', hydration: '750 mL/h', workRest: '40m / 20m', statement: 'Substantial cardiovascular strain. Heat cramps and heat exhaustion possible with activity. Maintain scheduled hydration.' };
+      if (valC < 54.0) return { category: 'Danger', color: '#ef4444', impact: 'Severe Burden', hydration: '1000 mL/h', workRest: '30m / 30m', statement: 'Severe thermoregulatory impairment. Heat exhaustion likely; rapid progression to heat stroke. Limit outdoor labor.' };
+      return { category: 'Extreme Danger', color: '#b91c1c', impact: 'Lethal Hazard', hydration: '1200+ mL/h', workRest: 'Mandatory Stop', statement: 'Imminent risk of heat stroke and cardiovascular collapse. Core body cooling critical. Mandatory indoor shelter.' };
+    }
+  },
+  wbgt: {
+    id: 'wbgt',
+    name: 'WBGT',
+    shortName: 'WBGT Outdoor',
+    fullName: 'Wet-Bulb Globe Temp (ISO 7243)',
+    sub: 'ISO 7243 Environmental Occupational Heat Stress',
+    cardId: 'card-idx-wbgt',
+    btnId: 'btn-model-wbgt',
+    minC: 15,
+    maxC: 35,
+    minF: 59,
+    maxF: 95,
+    tickStepsC: [15, 20, 25, 30, 35],
+    tickStepsF: [59, 68, 77, 86, 95],
+    defaultVal: 24,
+    classify: (valC) => {
+      if (valC < 18.0) return { category: 'No Risk', color: '#10b981', impact: 'Baseline Load', hydration: '250 mL/h', workRest: 'Continuous', statement: 'Normal occupational baseline. Unrestricted labor, athletics, and industrial outdoor activities allowed.' };
+      if (valC < 23.0) return { category: 'Low Stress', color: '#22c55e', impact: 'Discretionary', hydration: '500 mL/h', workRest: '50m / 10m', statement: 'Low occupational thermal strain. Discretionary pacing for heavy labor and unacclimatized personnel.' };
+      if (valC < 28.0) return { category: 'Moderate', color: '#eab308', impact: 'Paced Labor', hydration: '750 mL/h', workRest: '45m / 15m', statement: 'Moderate occupational heat stress. Work/rest cycle enforced. Provide designated shaded cool rest zones.' };
+      if (valC < 32.0) return { category: 'High Stress', color: '#f97316', impact: 'Restricted', hydration: '1000 mL/h', workRest: '30m / 30m', statement: 'High occupational heat stress. Restrict heavy physical exertion. Strict 30 min work / 30 min rest schedule.' };
+      return { category: 'Extreme Strain', color: '#ef4444', impact: 'Critical Hazard', hydration: '1200 mL/h', workRest: 'Cease Heavy Labor', statement: 'Extreme occupational heat hazard. Cessation of unacclimatized outdoor labor and strenuous athletic activities.' };
+    }
+  },
+  utci: {
+    id: 'utci',
+    name: 'UTCI',
+    shortName: 'UTCI Index',
+    fullName: 'Universal Thermal Climate Index',
+    sub: 'Fiala Multi-Node Dynamic Thermoregulation Model',
+    cardId: 'card-idx-utci',
+    btnId: 'btn-model-utci',
+    minC: 10,
+    maxC: 50,
+    minF: 50,
+    maxF: 122,
+    tickStepsC: [10, 20, 30, 40, 50],
+    tickStepsF: [50, 68, 86, 104, 122],
+    defaultVal: 26,
+    classify: (valC) => {
+      if (valC < 26.0) return { category: 'No Stress', color: '#10b981', impact: 'Thermo-Neutral', hydration: '250 mL/h', workRest: 'Continuous', statement: 'Comfortable thermo-neutral state. Dynamic peripheral vascular regulation balanced at 37°C core setpoint.' };
+      if (valC < 32.0) return { category: 'Moderate Stress', color: '#eab308', impact: 'Sweat Activated', hydration: '500 mL/h', workRest: '50m / 10m', statement: 'Moderate heat stress on human thermoregulatory system. Sweating response and skin vasodilation initiated.' };
+      if (valC < 38.0) return { category: 'Strong Stress', color: '#f97316', impact: 'Cardiovascular', hydration: '750 mL/h', workRest: '40m / 20m', statement: 'Strong heat stress. Elevating core body temperature and heart rate. Impaired mental vigilance and physical stamina.' };
+      if (valC < 46.0) return { category: 'Very Strong', color: '#ef4444', impact: 'Hyperthermia', hydration: '1000 mL/h', workRest: '20m / 40m', statement: 'Very strong thermal stress. Core body temperature elevation expected with prolonged exposure.' };
+      return { category: 'Extreme Stress', color: '#b91c1c', impact: 'Organ Damage', hydration: '1200+ mL/h', workRest: 'Immediate Shelter', statement: 'Extreme physiological thermal stress. Regulatory failure threshold with acute risk of heat-induced cellular damage.' };
+    }
+  },
+  wet_bulb: {
+    id: 'wet_bulb',
+    name: 'Wet Bulb',
+    shortName: 'Wet-Bulb Limit',
+    fullName: 'Wet-Bulb Temperature',
+    sub: 'Thermodynamic Evaporative Human Survival Boundary',
+    cardId: 'card-idx-wetbulb',
+    btnId: 'btn-model-wetbulb',
+    minC: 15,
+    maxC: 35,
+    minF: 59,
+    maxF: 95,
+    tickStepsC: [15, 20, 25, 30, 35],
+    tickStepsF: [59, 68, 77, 86, 95],
+    defaultVal: 21,
+    classify: (valC) => {
+      if (valC < 27.0) return { category: 'Manageable', color: '#10b981', impact: 'Evaporative Clear', hydration: '250 mL/h', workRest: 'Continuous', statement: 'Evaporative perspiration cooling fully effective. Vapor pressure gradient permits adequate skin cooling.' };
+      if (valC < 31.0) return { category: 'High Stress', color: '#f97316', impact: 'Impaired Cooling', hydration: '750 mL/h', workRest: '45m / 15m', statement: 'Reduced evaporative cooling efficiency. High humidity significantly slows skin surface perspiration dissipation.' };
+      if (valC < 35.0) return { category: 'Critical Danger', color: '#ef4444', impact: 'Core Drift Up', hydration: '1000 mL/h', workRest: '20m / 40m', statement: 'Critical thermodynamic boundary. Sweat cannot evaporate effectively. Core temperature rises even when resting in shade.' };
+      return { category: 'Lethal Limit', color: '#b91c1c', impact: 'Survival Boundary', hydration: 'Emergency AC', workRest: 'Mandatory Cessation', statement: 'Theoretical thermodynamic limit of human survival (35°C Tw). Fatal hyperthermia risk without active mechanical air conditioning.' };
+    }
+  },
+  humidex: {
+    id: 'humidex',
+    name: 'Humidex',
+    shortName: 'Canadian Humidex',
+    fullName: 'Canadian Humidex',
+    sub: 'Vapor Pressure Discomfort Scale (Masterton & Richardson)',
+    cardId: 'card-idx-humidex',
+    btnId: 'btn-model-humidex',
+    minC: 20,
+    maxC: 60,
+    minF: 68,
+    maxF: 140,
+    tickStepsC: [20, 30, 40, 50, 60],
+    tickStepsF: [68, 86, 104, 122, 140],
+    defaultVal: 30,
+    classify: (valC) => {
+      if (valC < 30.0) return { category: 'Comfortable', color: '#10b981', impact: 'Low Mugginess', hydration: '250 mL/h', workRest: 'Continuous', statement: 'Little to no perceived mugginess. Normal respiratory comfort and standard atmospheric conditions.' };
+      if (valC < 40.0) return { category: 'Some Discomfort', color: '#eab308', impact: 'Noticeable Muggy', hydration: '500 mL/h', workRest: '50m / 10m', statement: 'Noticeable discomfort and clamminess. Moderation of strenuous exertion and scheduled fluid intake advised.' };
+      if (valC < 45.0) return { category: 'Great Discomfort', color: '#f97316', impact: 'Heavy Mugginess', hydration: '750 mL/h', workRest: '35m / 25m', statement: 'Great discomfort. Avoid non-essential outdoor exertion; ensure adequate ventilation and continuous hydration.' };
+      return { category: 'Dangerous', color: '#ef4444', impact: 'Severe Humid Load', hydration: '1000 mL/h', workRest: 'Limit Exposure', statement: 'Dangerous humidity levels. Impaired evaporative cooling with high probability of heat cramps, exhaustion, and dizziness.' };
+    }
+  },
+  dew_point: {
+    id: 'dew_point',
+    name: 'Dew Point',
+    shortName: 'Dew Point',
+    fullName: 'Saturation Dew Point',
+    sub: 'Magnus-Tetens Atmospheric Moisture Saturation',
+    cardId: 'card-idx-dewpoint',
+    btnId: 'btn-model-dewpoint',
+    minC: 10,
+    maxC: 30,
+    minF: 50,
+    maxF: 86,
+    tickStepsC: [10, 15, 20, 25, 30],
+    tickStepsF: [50, 59, 68, 77, 86],
+    defaultVal: 18,
+    classify: (valC) => {
+      if (valC < 15.0) return { category: 'Comfortable', color: '#10b981', impact: 'Crisp & Dry', hydration: '250 mL/h', workRest: 'Continuous', statement: 'Optimal sweat vapor dissipation. Atmospheric moisture comfortably below human perspiration thresholds.' };
+      if (valC < 20.0) return { category: 'Humid', color: '#eab308', impact: 'Clammy Skin', hydration: '500 mL/h', workRest: '50m / 10m', statement: 'Noticeable ambient moisture. Skin feels clammy during physical activity as evaporative rate begins to decline.' };
+      if (valC < 24.0) return { category: 'Muggy', color: '#f97316', impact: 'Sticky Air', hydration: '750 mL/h', workRest: '40m / 20m', statement: 'Sticky, humid atmosphere. Perspiration clings to clothing and skin with sluggish natural cooling.' };
+      return { category: 'Oppressive', color: '#ef4444', impact: 'Tropical Saturation', hydration: '1000 mL/h', workRest: 'Strict Rest Cycles', statement: 'Severe tropical saturation boundary. Human perspiration cannot evaporate efficiently; stay in air-conditioned environments.' };
+    }
+  }
+};
+
+function switchStrainModel(modelKey) {
+  if (!STRAIN_MODELS[modelKey]) return;
+  state.selectedStrainModel = modelKey;
+  state.isGaugeSimulated = false;
+  state.simulatedValue = null;
+  if (state.thermalStressData) {
+    updateThermalStressPanel(state.thermalStressData);
+  }
+}
 
 function updateThermalStressPanel(data) {
+  if (!data) return;
   const idx = data.indices || {};
   const cls = idx.classifications || {};
 
@@ -651,38 +814,534 @@ function updateThermalStressPanel(data) {
     else { dewStatusEl.textContent = 'Comfortable'; dewStatusEl.style.color = '#10b981'; }
   }
 
-  // Update SVG Gauge Needle & Center Readouts
-  const hi = idx.heat_index != null ? idx.heat_index : 25;
-  const hiCls = cls.heat_index || { category: 'Normal', color: '#10b981' };
-  updateGaugeNeedle(hi, hiCls.category, hiCls.color);
+  // Update Biometeorological Strain Gauge Wheel
+  updateBiometGaugeWheel(idx);
 }
 
-function updateGaugeNeedle(hiCelsius, category, color) {
-  const needle = document.getElementById('gauge-needle');
+// ---------------------------------------------------------------------------
+// BIOMETEOROLOGICAL STRAIN GAUGE WHEEL ENGINE & HIGH-PRECISION ANIMATOR
+// ---------------------------------------------------------------------------
+const biometGaugeAnim = {
+  currentValC: null,
+  targetValC: null,
+  currentAngle: -90,
+  targetAngle: -90,
+  currentFraction: 0,
+  targetFraction: 0,
+  currentColor: '#10b981',
+  targetColor: '#10b981',
+  rafId: null,
+  isDragging: false,
+  isDemoPlaying: false,
+  demoTimer: null,
+  hasCalibrated: false
+};
+
+function triggerHubRipple(color = '#38bdf8') {
+  const ripple = document.getElementById('gauge-hub-ripple');
+  if (!ripple) return;
+  ripple.setAttribute('stroke', color);
+  ripple.classList.remove('active-ripple');
+  // Trigger DOM reflow to restart CSS keyframe animation
+  void ripple.offsetWidth;
+  ripple.classList.add('active-ripple');
+}
+
+function renderGaugeFrame(angle, fraction, valC, color, model) {
+  const needleGroup = document.getElementById('gauge-needle-group');
+  if (needleGroup) {
+    needleGroup.setAttribute('transform', `rotate(${angle.toFixed(2)} 160 175)`);
+    needleGroup.style.transform = `rotate(${angle.toFixed(2)}deg)`;
+  }
+
+  // Active sweep arc (radius 125, circumference 392.7)
+  const activeArc = document.getElementById('gauge-active-arc');
+  if (activeArc) {
+    const sweepLen = Math.max(0, Math.min(392.7, 392.7 * fraction));
+    activeArc.setAttribute('stroke-dasharray', `${sweepLen.toFixed(1)} 400`);
+    activeArc.setAttribute('stroke', color);
+  }
+
+  // Dynamic Glowing Comet Tip Bead positioned along the curve
+  const tipGroup = document.getElementById('gauge-tip-group');
+  const tipHalo = document.getElementById('gauge-arc-tip-halo');
+  const tipDot = document.getElementById('gauge-arc-tip');
+  if (tipGroup && tipHalo && tipDot) {
+    if (fraction > 0.005) {
+      const tipX = 160 - 125 * Math.cos(fraction * Math.PI);
+      const tipY = 175 - 125 * Math.sin(fraction * Math.PI);
+      tipHalo.setAttribute('cx', tipX.toFixed(1));
+      tipHalo.setAttribute('cy', tipY.toFixed(1));
+      tipDot.setAttribute('cx', tipX.toFixed(1));
+      tipDot.setAttribute('cy', tipY.toFixed(1));
+      tipHalo.setAttribute('fill', color);
+      tipDot.setAttribute('stroke', color);
+      tipGroup.setAttribute('opacity', '1');
+    } else {
+      tipGroup.setAttribute('opacity', '0');
+    }
+  }
+
+  // Metallic Hub and Needle Spine Accents
+  const hubPin = document.getElementById('gauge-hub-pin');
+  const hubOuter = document.getElementById('gauge-hub-outer');
+  const needleGlow = document.getElementById('gauge-needle-glow');
+  const needleSpine = document.getElementById('gauge-needle-spine');
+  if (hubPin) hubPin.setAttribute('fill', color);
+  if (hubOuter) hubOuter.setAttribute('stroke', color);
+  if (needleGlow) needleGlow.setAttribute('fill', color);
+  if (needleSpine) needleSpine.setAttribute('stroke', color);
+
+  // Dynamic Scale Ticks - Highlight Active Segment
+  const activeTickIndex = Math.max(0, Math.min(4, Math.round(fraction * 4)));
+  for (let i = 0; i < 5; i++) {
+    const tickEl = document.getElementById(`gauge-tick-${i}`);
+    if (tickEl) {
+      tickEl.classList.toggle('active-tick', i === activeTickIndex);
+    }
+  }
+
+  // Formatted numeric readout
+  const displayVal = state.unit === 'F' ? (valC * 9/5 + 32).toFixed(1) : valC.toFixed(1);
   const valText = document.getElementById('gauge-value-text');
+  const largeVal = document.getElementById('gauge-heat-index');
+  if (valText) valText.textContent = displayVal;
+  if (largeVal) largeVal.textContent = displayVal;
+}
+
+function updateBiometGaugeWheel(idx, options = {}) {
+  const modelKey = state.selectedStrainModel || 'heat_index';
+  const model = STRAIN_MODELS[modelKey] || STRAIN_MODELS.heat_index;
+
+  // Highlight active model nav button
+  document.querySelectorAll('.model-nav-btn').forEach(btn => {
+    btn.classList.toggle('active', btn.dataset.model === modelKey);
+  });
+
+  // Highlight active index card in grid
+  document.querySelectorAll('.index-card').forEach(card => {
+    card.classList.remove('active-strain-card');
+  });
+  const activeCard = document.getElementById(model.cardId);
+  if (activeCard) activeCard.classList.add('active-strain-card');
+
+  // Update subtitle
+  const subEl = document.getElementById('gauge-model-sub');
+  if (subEl) subEl.textContent = model.sub;
+
+  // Retrieve raw Celsius value for active model
+  let rawValC = null;
+  if (modelKey === 'heat_index') rawValC = idx?.heat_index;
+  else if (modelKey === 'wbgt') rawValC = idx?.wbgt;
+  else if (modelKey === 'utci') rawValC = idx?.utci;
+  else if (modelKey === 'wet_bulb') rawValC = idx?.wet_bulb;
+  else if (modelKey === 'humidex') rawValC = idx?.humidex;
+  else if (modelKey === 'dew_point') rawValC = idx?.dew_point;
+
+  if (rawValC == null || isNaN(rawValC)) rawValC = model.defaultVal;
+
+  // If user is actively scrubbing / simulated
+  const isSim = Boolean(state.isGaugeSimulated && state.simulatedValue != null);
+  const targetValC = isSim ? state.simulatedValue : rawValC;
+
+  const info = model.classify(targetValC);
+  const targetColor = info.color;
+
+  // Map targetValC to angle between -90° and +90°
+  const minC = model.minC;
+  const maxC = model.maxC;
+  const clampedC = Math.max(minC, Math.min(maxC, targetValC));
+  const targetFraction = (clampedC - minC) / (maxC - minC);
+  const targetAngle = targetFraction * 180 - 90;
+
+  // Update scale tick labels based on current unit
+  const tickSteps = state.unit === 'F' ? model.tickStepsF : model.tickStepsC;
+  for (let i = 0; i < 5; i++) {
+    const tickEl = document.getElementById(`gauge-tick-${i}`);
+    if (tickEl && tickSteps[i] != null) {
+      tickEl.textContent = `${tickSteps[i]}°`;
+    }
+  }
+
+  // Update textual readouts & statuses
   const unitText = document.getElementById('gauge-unit-text');
   const labelText = document.getElementById('gauge-label-text');
-  const badgePill = document.getElementById('gauge-badge-pill');
-
-  if (!needle || !valText || !labelText) return;
-
-  // Map 20°C to 60°C onto -90° to +90° rotation
-  let angle = ((hiCelsius - 20) / 40) * 180 - 90;
-  angle = Math.max(-90, Math.min(90, angle));
-
-  needle.setAttribute('transform', `rotate(${angle}, 160, 175)`);
-
-  const displayVal = state.unit === 'F' ? (hiCelsius * 9/5 + 32).toFixed(1) : hiCelsius.toFixed(1);
-  valText.textContent = displayVal;
-  unitText.textContent = `°${state.unit} Heat Index`;
-  const catText = category ? category.toUpperCase() : 'NORMAL';
-  labelText.textContent = catText;
-  labelText.style.fill = color;
-
-  if (badgePill) {
-    badgePill.textContent = catText;
-    badgePill.style.background = color;
+  if (unitText) unitText.textContent = `°${state.unit} ${model.shortName}`;
+  if (labelText) {
+    labelText.textContent = info.category.toUpperCase();
+    labelText.style.fill = targetColor;
   }
+
+  // Status badges & Interactive reset controls
+  const badgePill = document.getElementById('gauge-badge-pill');
+  const resetBtn = document.getElementById('gauge-reset-btn');
+  const hintDot = document.getElementById('gauge-hint-dot');
+  const hintText = document.getElementById('gauge-hint-text');
+
+  const displayVal = state.unit === 'F' ? (targetValC * 9/5 + 32).toFixed(1) : targetValC.toFixed(1);
+
+  if (isSim) {
+    if (badgePill) {
+      badgePill.textContent = `SIMULATED: ${info.category.toUpperCase()}`;
+      badgePill.style.background = targetColor;
+    }
+    if (resetBtn) resetBtn.classList.remove('hidden');
+    if (hintDot) hintDot.classList.add('simulated');
+    if (hintText) hintText.textContent = `Simulated ${model.shortName}: ${displayVal}°${state.unit} — Click Live Sync to restore real telemetry`;
+  } else {
+    if (badgePill) {
+      badgePill.textContent = info.category.toUpperCase();
+      badgePill.style.background = targetColor;
+    }
+    if (resetBtn) resetBtn.classList.add('hidden');
+    if (hintDot) hintDot.classList.remove('simulated');
+    if (hintText) hintText.textContent = `Interactive Dial — Click or drag to test physiological thresholds`;
+  }
+
+  // Summary box readouts
+  const largeUnit = document.getElementById('unit-label-gauge');
+  const catPill = document.getElementById('gauge-category-pill');
+  const statementEl = document.getElementById('gauge-statement');
+
+  if (largeUnit) largeUnit.textContent = `°${state.unit}`;
+  if (catPill) {
+    catPill.textContent = info.category;
+    catPill.style.color = targetColor;
+    catPill.style.borderColor = targetColor;
+    catPill.style.backgroundColor = `${targetColor}1f`;
+  }
+  if (statementEl) statementEl.textContent = info.statement;
+
+  // Clinical metrics grid
+  const impactEl = document.getElementById('gauge-impact-metric');
+  const hydrationEl = document.getElementById('gauge-hydration-metric');
+  const workrestEl = document.getElementById('gauge-workrest-metric');
+
+  if (impactEl) {
+    impactEl.textContent = info.impact;
+    impactEl.style.color = targetColor;
+  }
+  if (hydrationEl) hydrationEl.textContent = info.hydration;
+  if (workrestEl) workrestEl.textContent = info.workRest;
+
+  // ANIMATION DISPATCH: Direct instant render vs Smooth Spring Transition
+  if (options.instant || biometGaugeAnim.isDragging) {
+    if (biometGaugeAnim.rafId) {
+      cancelAnimationFrame(biometGaugeAnim.rafId);
+      biometGaugeAnim.rafId = null;
+    }
+    biometGaugeAnim.currentAngle = targetAngle;
+    biometGaugeAnim.currentFraction = targetFraction;
+    biometGaugeAnim.currentValC = targetValC;
+    biometGaugeAnim.currentColor = targetColor;
+    renderGaugeFrame(targetAngle, targetFraction, targetValC, targetColor, model);
+    return;
+  }
+
+  // If first run, initialize smoothly from minimum or previous value
+  if (biometGaugeAnim.currentValC == null) {
+    biometGaugeAnim.currentValC = Math.max(minC, targetValC - 10);
+    biometGaugeAnim.currentFraction = Math.max(0, (biometGaugeAnim.currentValC - minC) / (maxC - minC));
+    biometGaugeAnim.currentAngle = biometGaugeAnim.currentFraction * 180 - 90;
+  }
+
+  // Smooth RAF Animation with Spring Settle
+  if (biometGaugeAnim.rafId) {
+    cancelAnimationFrame(biometGaugeAnim.rafId);
+  }
+
+  const startAngle = biometGaugeAnim.currentAngle;
+  const startFraction = biometGaugeAnim.currentFraction;
+  const startVal = biometGaugeAnim.currentValC;
+  const startTime = performance.now();
+  const duration = options.duration || 680;
+
+  function animStep(now) {
+    const elapsed = now - startTime;
+    const progress = Math.min(1, elapsed / duration);
+    // Smooth cubic ease out with slight elastic settle
+    const ease = 1 - Math.pow(1 - progress, 3);
+    const curAngle = startAngle + (targetAngle - startAngle) * ease;
+    const curFraction = Math.max(0, Math.min(1, startFraction + (targetFraction - startFraction) * ease));
+    const curVal = startVal + (targetValC - startVal) * ease;
+
+    biometGaugeAnim.currentAngle = curAngle;
+    biometGaugeAnim.currentFraction = curFraction;
+    biometGaugeAnim.currentValC = curVal;
+
+    renderGaugeFrame(curAngle, curFraction, curVal, targetColor, model);
+
+    if (progress < 1) {
+      biometGaugeAnim.rafId = requestAnimationFrame(animStep);
+    } else {
+      biometGaugeAnim.currentAngle = targetAngle;
+      biometGaugeAnim.currentFraction = targetFraction;
+      biometGaugeAnim.currentValC = targetValC;
+      biometGaugeAnim.currentColor = targetColor;
+      biometGaugeAnim.rafId = null;
+      renderGaugeFrame(targetAngle, targetFraction, targetValC, targetColor, model);
+      triggerHubRipple(targetColor);
+      if (options.onComplete) options.onComplete();
+    }
+  }
+
+  biometGaugeAnim.rafId = requestAnimationFrame(animStep);
+}
+
+function triggerGaugeCalibration() {
+  if (biometGaugeAnim.isDemoPlaying || biometGaugeAnim.isDragging) return;
+  const modelKey = state.selectedStrainModel || 'heat_index';
+  const model = STRAIN_MODELS[modelKey] || STRAIN_MODELS.heat_index;
+  
+  // Quick instrument boot calibration sweep: -90 deg -> +90 deg -> target
+  const initialTarget = (state.thermalStressData?.indices?.[modelKey]) || model.defaultVal;
+  
+  biometGaugeAnim.currentAngle = -90;
+  biometGaugeAnim.currentFraction = 0;
+  biometGaugeAnim.currentValC = model.minC;
+
+  updateBiometGaugeWheel(state.thermalStressData?.indices || {}, { duration: 900 });
+}
+
+function playGaugeSweepDemo() {
+  if (biometGaugeAnim.demoTimer) {
+    clearTimeout(biometGaugeAnim.demoTimer);
+    biometGaugeAnim.demoTimer = null;
+  }
+
+  const demoBtn = document.getElementById('gauge-demo-btn');
+  if (biometGaugeAnim.isDemoPlaying) {
+    // Stop demo and return to live
+    biometGaugeAnim.isDemoPlaying = false;
+    if (demoBtn) {
+      demoBtn.classList.remove('is-playing');
+      demoBtn.innerHTML = '<svg viewBox="0 0 24 24" width="11" height="11" stroke="currentColor" stroke-width="2.5" fill="none"><polygon points="5 3 19 12 5 21 5 3"/></svg><span>SWEEP DEMO</span>';
+    }
+    state.isGaugeSimulated = false;
+    state.simulatedValue = null;
+    updateThermalStressPanel(state.thermalStressData || { indices: {} });
+    showToast('Biometeorological sweep demo stopped. Live sync restored.', 'info');
+    return;
+  }
+
+  biometGaugeAnim.isDemoPlaying = true;
+  if (demoBtn) {
+    demoBtn.classList.add('is-playing');
+    demoBtn.innerHTML = '<svg viewBox="0 0 24 24" width="11" height="11" stroke="currentColor" stroke-width="2.5" fill="none"><rect x="6" y="4" width="4" height="16"/><rect x="14" y="4" width="4" height="16"/></svg><span>STOP DEMO</span>';
+  }
+
+  showToast('Running animated biometeorological strain threshold demo...', 'info');
+
+  const modelKey = state.selectedStrainModel || 'heat_index';
+  const model = STRAIN_MODELS[modelKey] || STRAIN_MODELS.heat_index;
+  const min = model.minC;
+  const max = model.maxC;
+  const range = max - min;
+
+  // 5 progressive physiological danger steps
+  const demoSteps = [
+    min + range * 0.15,
+    min + range * 0.38,
+    min + range * 0.62,
+    min + range * 0.84,
+    min + range * 0.96
+  ];
+
+  let stepIdx = 0;
+
+  function runNextStep() {
+    if (!biometGaugeAnim.isDemoPlaying) return;
+
+    if (stepIdx < demoSteps.length) {
+      const simVal = Number(demoSteps[stepIdx].toFixed(1));
+      state.isGaugeSimulated = true;
+      state.simulatedValue = simVal;
+      stepIdx++;
+      updateBiometGaugeWheel(state.thermalStressData?.indices || {}, {
+        duration: 750,
+        onComplete: () => {
+          biometGaugeAnim.demoTimer = setTimeout(runNextStep, 800);
+        }
+      });
+    } else {
+      // Finished sweep - smoothly restore real data
+      biometGaugeAnim.isDemoPlaying = false;
+      if (demoBtn) {
+        demoBtn.classList.remove('is-playing');
+        demoBtn.innerHTML = '<svg viewBox="0 0 24 24" width="11" height="11" stroke="currentColor" stroke-width="2.5" fill="none"><polygon points="5 3 19 12 5 21 5 3"/></svg><span>SWEEP DEMO</span>';
+      }
+      state.isGaugeSimulated = false;
+      state.simulatedValue = null;
+      updateThermalStressPanel(state.thermalStressData || { indices: {} });
+      showToast('Completed strain sweep demonstration. Telemetry synced.', 'success');
+    }
+  }
+
+  runNextStep();
+}
+
+function initStrainGaugeWheelInteraction() {
+  const svg = document.getElementById('stress-gauge');
+  if (!svg) return;
+
+  function calculateAngleAndValue(clientX, clientY) {
+    const pt = svg.createSVGPoint();
+    pt.x = clientX;
+    pt.y = clientY;
+    const ctm = svg.getScreenCTM();
+    if (!ctm) return null;
+    const svgPoint = pt.matrixTransform(ctm.inverse());
+
+    // Dial center is (160, 175)
+    const dx = svgPoint.x - 160;
+    const dy = svgPoint.y - 175;
+
+    // Angle relative to vertical: -90 deg (left), 0 deg (top), +90 deg (right)
+    let deg = Math.atan2(dy, dx) * 180 / Math.PI;
+    let angle = deg + 90;
+    if (dy > 0) {
+      angle = dx < 0 ? -90 : 90;
+    }
+    angle = Math.max(-90, Math.min(90, angle));
+
+    const fraction = (angle + 90) / 180;
+    const model = STRAIN_MODELS[state.selectedStrainModel] || STRAIN_MODELS.heat_index;
+    const simC = model.minC + fraction * (model.maxC - model.minC);
+    return { angle, simC: Number(simC.toFixed(1)) };
+  }
+
+  // Interactive Hover Reticle Guide Line
+  const hoverGuide = document.getElementById('gauge-hover-needle');
+  svg.addEventListener('mousemove', (e) => {
+    if (biometGaugeAnim.isDragging) return;
+    const pt = svg.createSVGPoint();
+    pt.x = e.clientX;
+    pt.y = e.clientY;
+    const ctm = svg.getScreenCTM();
+    if (!ctm) return;
+    const svgPoint = pt.matrixTransform(ctm.inverse());
+
+    const dx = svgPoint.x - 160;
+    const dy = svgPoint.y - 175;
+    if (dy <= 15) {
+      const angleRad = Math.atan2(dy, dx);
+      const endX = 160 + 125 * Math.cos(angleRad);
+      const endY = 175 + 125 * Math.sin(angleRad);
+      if (hoverGuide) {
+        hoverGuide.setAttribute('x2', endX.toFixed(1));
+        hoverGuide.setAttribute('y2', endY.toFixed(1));
+        hoverGuide.setAttribute('opacity', '0.55');
+      }
+    } else if (hoverGuide) {
+      hoverGuide.setAttribute('opacity', '0');
+    }
+  });
+
+  svg.addEventListener('mouseleave', () => {
+    if (hoverGuide) hoverGuide.setAttribute('opacity', '0');
+  });
+
+  function handleStart(e) {
+    if (biometGaugeAnim.isDemoPlaying) {
+      playGaugeSweepDemo(); // cancel active demo
+    }
+
+    biometGaugeAnim.isDragging = true;
+    svg.classList.add('is-dragging');
+    if (hoverGuide) hoverGuide.setAttribute('opacity', '0');
+
+    const clientX = e.touches ? e.touches[0].clientX : e.clientX;
+    const clientY = e.touches ? e.touches[0].clientY : e.clientY;
+    const res = calculateAngleAndValue(clientX, clientY);
+    if (res != null) {
+      state.isGaugeSimulated = true;
+      state.simulatedValue = res.simC;
+      triggerHubRipple('#38bdf8');
+      updateBiometGaugeWheel(state.thermalStressData?.indices || {}, { instant: true });
+    }
+  }
+
+  function handleMove(e) {
+    if (!biometGaugeAnim.isDragging) return;
+    if (e.cancelable) e.preventDefault();
+
+    const clientX = e.touches ? e.touches[0].clientX : e.clientX;
+    const clientY = e.touches ? e.touches[0].clientY : e.clientY;
+    const res = calculateAngleAndValue(clientX, clientY);
+    if (res != null) {
+      state.isGaugeSimulated = true;
+      state.simulatedValue = res.simC;
+      updateBiometGaugeWheel(state.thermalStressData?.indices || {}, { instant: true });
+    }
+  }
+
+  function handleEnd() {
+    if (!biometGaugeAnim.isDragging) return;
+    biometGaugeAnim.isDragging = false;
+    svg.classList.remove('is-dragging');
+    triggerHubRipple();
+    // Gentle settlement animation to current simulated value
+    updateBiometGaugeWheel(state.thermalStressData?.indices || {}, { duration: 250 });
+  }
+
+  svg.addEventListener('mousedown', handleStart);
+  window.addEventListener('mousemove', handleMove);
+  window.addEventListener('mouseup', handleEnd);
+
+  svg.addEventListener('touchstart', handleStart, { passive: false });
+  window.addEventListener('touchmove', handleMove, { passive: false });
+  window.addEventListener('touchend', handleEnd);
+  window.addEventListener('touchcancel', handleEnd);
+
+  // Model Nav Buttons click delegation
+  const modelNav = document.getElementById('strain-model-nav');
+  if (modelNav) {
+    modelNav.addEventListener('click', (e) => {
+      const btn = e.target.closest('.model-nav-btn');
+      if (btn && btn.dataset.model) {
+        if (biometGaugeAnim.isDemoPlaying) playGaugeSweepDemo();
+        switchStrainModel(btn.dataset.model);
+      }
+    });
+  }
+
+  // Live Sync reset button
+  const resetBtn = document.getElementById('gauge-reset-btn');
+  if (resetBtn) {
+    resetBtn.addEventListener('click', () => {
+      if (biometGaugeAnim.isDemoPlaying) playGaugeSweepDemo();
+      state.isGaugeSimulated = false;
+      state.simulatedValue = null;
+      triggerHubRipple('#10b981');
+      updateThermalStressPanel(state.thermalStressData || { indices: {} });
+      showToast('Restored live biometeorological station telemetry', 'info');
+    });
+  }
+
+  // Sweep Demo button
+  const demoBtn = document.getElementById('gauge-demo-btn');
+  if (demoBtn) {
+    demoBtn.addEventListener('click', playGaugeSweepDemo);
+  }
+
+  // 6 Index cards clicking
+  const cardMap = {
+    'card-idx-hi': 'heat_index',
+    'card-idx-wbgt': 'wbgt',
+    'card-idx-utci': 'utci',
+    'card-idx-wetbulb': 'wet_bulb',
+    'card-idx-humidex': 'humidex',
+    'card-idx-dewpoint': 'dew_point'
+  };
+  Object.entries(cardMap).forEach(([cardId, modelKey]) => {
+    const card = document.getElementById(cardId);
+    if (card) {
+      card.addEventListener('click', () => {
+        if (biometGaugeAnim.isDemoPlaying) playGaugeSweepDemo();
+        switchStrainModel(modelKey);
+      });
+    }
+  });
 }
 
 // ========== 4. 48-HOUR TIMELINE CHART ==========
@@ -1290,27 +1949,30 @@ function getShelterSkeletonsHtml() {
   for (let i = 0; i < 3; i++) {
     html += `
       <div class="shelter-card skeleton-card">
-        <div class="shelter-card-top" style="display:flex; justify-content:space-between; align-items:flex-start;">
-          <div style="flex:1;">
-            <div class="skeleton-shimmer skeleton-text" style="width:68%; height:16px; margin-bottom:6px;"></div>
-            <div class="skeleton-shimmer skeleton-text" style="width:45%; height:11px;"></div>
+        <div class="shelter-card-head">
+          <div class="shelter-head-main" style="width: 100%;">
+            <div class="skeleton-shimmer skeleton-text" style="width: 60%; height: 18px; margin-bottom: 4px;"></div>
+            <div class="skeleton-shimmer skeleton-text" style="width: 40%; height: 12px;"></div>
           </div>
-          <div class="skeleton-shimmer skeleton-pill" style="width:70px; height:18px;"></div>
+          <div class="skeleton-shimmer skeleton-pill" style="width: 60px; height: 22px;"></div>
         </div>
-        <div class="skeleton-shimmer skeleton-text" style="width:85%; height:12px; margin:8px 0;"></div>
-        <div class="shelter-occ-row" style="display:flex; justify-content:space-between; margin-bottom:4px;">
-          <div class="skeleton-shimmer skeleton-text" style="width:40%; height:12px;"></div>
-          <div class="skeleton-shimmer skeleton-text" style="width:32px; height:12px;"></div>
+        <div class="skeleton-shimmer skeleton-text" style="width: 80%; height: 28px; border-radius: 4px; margin-top: 8px;"></div>
+        <div class="shelter-capacity-module" style="margin-top: 8px;">
+          <div style="display:flex; justify-content:space-between; margin-bottom: 6px;">
+            <div class="skeleton-shimmer skeleton-text" style="width: 40%; height: 12px;"></div>
+            <div class="skeleton-shimmer skeleton-text" style="width: 20%; height: 12px;"></div>
+          </div>
+          <div class="shelter-occ-track" style="height: 6px; border-radius: 3px;"></div>
         </div>
-        <div class="shelter-occ-bar-wrap" style="height:6px; background:rgba(255,255,255,0.04); border-radius:3px; overflow:hidden;">
-          <div class="skeleton-shimmer" style="width:100%; height:100%;"></div>
+        <div class="shelter-tags-grid" style="margin-top: 8px;">
+          <div class="skeleton-shimmer skeleton-pill" style="width: 50px; height: 20px;"></div>
+          <div class="skeleton-shimmer skeleton-pill" style="width: 60px; height: 20px;"></div>
+          <div class="skeleton-shimmer skeleton-pill" style="width: 45px; height: 20px;"></div>
         </div>
-        <div class="shelter-amenities-tags" style="display:flex; gap:6px; margin-top:8px;">
-          <span class="skeleton-shimmer skeleton-pill" style="width:48px; height:18px;"></span>
-          <span class="skeleton-shimmer skeleton-pill" style="width:56px; height:18px;"></span>
-          <span class="skeleton-shimmer skeleton-pill" style="width:62px; height:18px;"></span>
+        <div class="shelter-card-actions" style="margin-top: 12px;">
+          <div class="skeleton-shimmer skeleton-text" style="width: 35%; height: 14px;"></div>
+          <div class="skeleton-shimmer skeleton-pill" style="width: 75px; height: 26px;"></div>
         </div>
-        <div class="skeleton-shimmer" style="width:100%; height:32px; border-radius:6px; margin-top:10px;"></div>
       </div>
     `;
   }
@@ -1318,35 +1980,35 @@ function getShelterSkeletonsHtml() {
 }
 
 function getProtocolSkeletonsHtml() {
-  let html = '';
+  let html = '<ul style="list-style:none; display:flex; flex-direction:column; gap:0.5rem; margin:0; padding:0;">';
   for (let i = 0; i < 4; i++) {
     html += `
-      <div class="skeleton-row">
-        <div class="skeleton-shimmer skeleton-circle" style="width:18px; height:18px;"></div>
+      <li style="background: rgba(0, 0, 0, 0.2); border: 1px solid var(--border-subtle); border-left: 2px solid var(--accent-primary); border-radius: var(--radius-sm); padding: 0.65rem 0.85rem; display: flex; align-items: flex-start; gap: 0.5rem;">
+        <div class="skeleton-shimmer skeleton-circle" style="width:14px; height:14px; margin-top:2px;"></div>
         <div style="flex:1;">
           <div class="skeleton-shimmer skeleton-text" style="width:75%; height:13px; margin-bottom:4px;"></div>
           <div class="skeleton-shimmer skeleton-text" style="width:90%; height:11px;"></div>
         </div>
-      </div>
+      </li>
     `;
   }
-  return html;
+  return html + '</ul>';
 }
 
 function getDemographicsSkeletonsHtml() {
-  let html = '';
+  let html = '<ul style="list-style:none; display:flex; flex-direction:column; gap:0.5rem; margin:0; padding:0;">';
   for (let i = 0; i < 3; i++) {
     html += `
-      <div class="skeleton-row" style="padding:0.75rem;">
-        <div class="skeleton-shimmer skeleton-circle" style="width:24px; height:24px;"></div>
+      <li style="background: rgba(245, 158, 11, 0.1); border: 1px solid rgba(245, 158, 11, 0.2); border-left: 2px solid #f59e0b; border-radius: var(--radius-sm); padding: 0.65rem 0.85rem; display: flex; align-items: flex-start; gap: 0.5rem;">
+        <div class="skeleton-shimmer skeleton-circle" style="width:18px; height:18px;"></div>
         <div style="flex:1;">
           <div class="skeleton-shimmer skeleton-text" style="width:45%; height:14px; margin-bottom:5px;"></div>
           <div class="skeleton-shimmer skeleton-text" style="width:85%; height:11px;"></div>
         </div>
-      </div>
+      </li>
     `;
   }
-  return html;
+  return html + '</ul>';
 }
 
 function getCityListSkeletonsHtml() {
@@ -3169,7 +3831,10 @@ const APP_VIEWS = {
     id: 'view-biomet',
     category: 'Public Observations',
     title: 'Multi-Model Bio-Thermal Stress Suite',
-    adminOnly: false
+    adminOnly: false,
+    onActivate: () => {
+      triggerGaugeCalibration();
+    }
   },
   'forecast': {
     id: 'view-forecast',
@@ -3949,39 +4614,52 @@ async function loadCoolingShelters() {
         sideCountEl.textContent = `${coolingSheltersData.length} Hubs`;
       }
       grid.innerHTML = coolingSheltersData.map(s => {
-        const occColor = s.occupancy_pct > 85 ? 'bar-red' : (s.occupancy_pct > 65 ? 'bar-yellow' : 'bar-green');
-        const cityBadge = s.city_name ? `<span class="shelter-tag" style="background:rgba(2,132,199,0.15); color:#38bdf8; border:1px solid rgba(2,132,199,0.3);">📍 ${s.city_name}</span>` : '';
+        const occColor = s.occupancy_pct > 85 ? 'fill-red' : (s.occupancy_pct > 65 ? 'fill-yellow' : 'fill-green');
+        const cityBadge = s.city_name ? `<span class="shelter-badge badge-city">📍 ${s.city_name}</span>` : '';
         return `
           <div class="shelter-card" id="shelter-card-${s.id}">
-            <div class="shelter-card-top">
-              <div>
+            <div class="shelter-card-head">
+              <div class="shelter-head-main">
                 <h4 class="shelter-name">${s.name}</h4>
-                <span class="shelter-cat">${s.category} • ${s.operating_hours}</span>
+                <div class="shelter-subtext">${s.category} <span class="dot-sep">•</span> ${s.operating_hours}</div>
               </div>
-              <span class="shelter-dist-pill">${s.distance_km} km (${s.walking_time_mins} min walk)</span>
+              <div class="shelter-dist-pill">
+                <svg viewBox="0 0 24 24" width="12" height="12" stroke="currentColor" stroke-width="2" fill="none"><path d="M21 10c0 7-9 13-9 13s-9-6-9-13a9 9 0 0 1 18 0z"></path><circle cx="12" cy="10" r="3"></circle></svg>
+                ${s.distance_km} km
+              </div>
             </div>
 
-            <p class="shelter-addr">📍 ${s.address}</p>
-
-            <div class="shelter-occ-row">
-              <span>Live Capacity: <b>${s.current_occupancy} / ${s.capacity_total}</b></span>
-              <span style="font-family:var(--font-mono); font-weight:700;">${s.occupancy_pct}%</span>
-            </div>
-            <div class="shelter-occ-bar-wrap">
-              <div class="shelter-occ-bar ${occColor}" style="width: ${s.occupancy_pct}%;"></div>
+            <div class="shelter-addr-box">
+               ${s.address}
             </div>
 
-            <div class="shelter-amenities-tags">
+            <div class="shelter-capacity-module">
+              <div class="shelter-occ-label">
+                <span>Live Capacity</span>
+                <span class="occ-fraction">${s.current_occupancy} / ${s.capacity_total} <span class="occ-pct">(${s.occupancy_pct}%)</span></span>
+              </div>
+              <div class="shelter-occ-track">
+                <div class="shelter-occ-fill ${occColor}" style="width: ${s.occupancy_pct}%;"></div>
+              </div>
+            </div>
+
+            <div class="shelter-tags-grid">
               ${cityBadge}
-              <span class="shelter-tag tag-ac">❄️ ${s.ac_type}</span>
-              <span class="shelter-tag tag-ors">💧 ORS Packets (${s.ors_stock_packets})</span>
-              ${s.ice_immersion_facility ? '<span class="shelter-tag tag-ice">🧊 Ice Immersion Tub</span>' : ''}
-              ${s.wheelchair_accessible ? '<span class="shelter-tag">♿ Wheelchair Access</span>' : ''}
+              <span class="shelter-badge badge-ac">❄️ ${s.ac_type}</span>
+              <span class="shelter-badge badge-ors">💧 ${s.ors_stock_packets} ORS</span>
+              ${s.ice_immersion_facility ? '<span class="shelter-badge badge-ice">🧊 Ice Tub</span>' : ''}
+              ${s.wheelchair_accessible ? '<span class="shelter-badge">♿ Access</span>' : ''}
             </div>
 
-            <div class="shelter-card-footer">
-              <span class="shelter-hours">📞 ${s.contact}</span>
-              <button class="btn-route-map" onclick="routeToShelter('${s.id}')">Show Route on Map</button>
+            <div class="shelter-card-actions">
+              <div class="shelter-contact">
+                <svg viewBox="0 0 24 24" width="12" height="12" stroke="currentColor" stroke-width="2" fill="none"><path d="M22 16.92v3a2 2 0 0 1-2.18 2 19.79 19.79 0 0 1-8.63-3.07 19.5 19.5 0 0 1-6-6 19.79 19.79 0 0 1-3.07-8.67A2 2 0 0 1 4.11 2h3a2 2 0 0 1 2 1.72 12.84 12.84 0 0 0 .7 2.81 2 2 0 0 1-.45 2.11L8.09 9.91a16 16 0 0 0 6 6l1.27-1.27a2 2 0 0 1 2.11-.45 12.84 12.84 0 0 0 2.81.7A2 2 0 0 1 22 16.92z"></path></svg>
+                ${s.contact}
+              </div>
+              <button class="btn-route-action" onclick="routeToShelter('${s.id}')">
+                <svg viewBox="0 0 24 24" width="14" height="14" stroke="currentColor" stroke-width="2" fill="none"><polygon points="3 11 22 2 13 21 11 13 3 11"/></svg>
+                Route
+              </button>
             </div>
           </div>
         `;

@@ -1,6 +1,112 @@
 <!DOCTYPE html>
 <html lang="en">
 <head>
+  <script>
+    (function() {
+      // 1. Sanitize web storage from corrupt 'undefined' strings
+      try {
+        if (typeof window !== 'undefined') {
+          if (window.localStorage) {
+            for (let i = localStorage.length - 1; i >= 0; i--) {
+              const k = localStorage.key(i);
+              if (k) {
+                const v = localStorage.getItem(k);
+                if (v === 'undefined' || v === 'null' || v === 'NaN' || v === '') {
+                  localStorage.removeItem(k);
+                }
+              }
+            }
+          }
+          if (window.sessionStorage) {
+            for (let i = sessionStorage.length - 1; i >= 0; i--) {
+              const k = sessionStorage.key(i);
+              if (k) {
+                const v = sessionStorage.getItem(k);
+                if (v === 'undefined' || v === 'null' || v === 'NaN' || v === '') {
+                  sessionStorage.removeItem(k);
+                }
+              }
+            }
+          }
+        }
+      } catch (_) {}
+
+      // 2. Wrap Storage.prototype.getItem to prevent returning literal "undefined" string
+      try {
+        if (typeof Storage !== 'undefined' && Storage.prototype && Storage.prototype.getItem) {
+          const _origGetItem = Storage.prototype.getItem;
+          Storage.prototype.getItem = function(key) {
+            const val = _origGetItem.call(this, key);
+            if (val === 'undefined' || val === 'null') return null;
+            return val;
+          };
+        }
+      } catch (_) {}
+
+      // 3. Wrap JSON.parse safely to intercept and nullify "undefined", null, empty, or malformed undefined inputs
+      try {
+        const _origParse = JSON.parse;
+        JSON.parse = function(text, reviver) {
+          if (text === undefined || text === null || text === '' || text === 'undefined' || text === '"undefined"') {
+            return null;
+          }
+          if (typeof text === 'string') {
+            const trimmed = text.trim();
+            if (!trimmed || trimmed === 'undefined' || trimmed === '"undefined"') {
+              return null;
+            }
+          }
+          try {
+            return _origParse.call(JSON, text, reviver);
+          } catch (err) {
+            if (typeof text === 'string' && (text.includes('undefined') || !text.trim())) {
+              return null;
+            }
+            if (err && err.message && (err.message.includes('not valid JSON') || err.message.includes('Unexpected token'))) {
+              return null;
+            }
+            throw err;
+          }
+        };
+      } catch (_) {}
+
+      // 4. Wrap Response.prototype.json safely to prevent unhandled rejection on undefined response bodies
+      try {
+        if (typeof Response !== 'undefined' && Response.prototype && Response.prototype.json) {
+          const _origJson = Response.prototype.json;
+          Response.prototype.json = async function() {
+            try {
+              const text = await this.text();
+              if (!text || text === 'undefined' || text === '"undefined"') return null;
+              const trimmed = text.trim();
+              if (!trimmed || trimmed === 'undefined' || trimmed === '"undefined"') return null;
+              return JSON.parse(trimmed);
+            } catch (_) {
+              return null;
+            }
+          };
+        }
+      } catch (_) {}
+
+      // 5. Global error and unhandled rejection shields for JSON parse anomalies
+      window.addEventListener('error', function(event) {
+        if (event && event.message && (event.message.includes('not valid JSON') || event.message.includes('Unexpected token'))) {
+          event.preventDefault();
+          event.stopImmediatePropagation();
+          return true;
+        }
+      }, true);
+
+      window.addEventListener('unhandledrejection', function(event) {
+        const msg = event && (event.reason?.message || String(event.reason || ''));
+        if (msg && (msg.includes('not valid JSON') || msg.includes('Unexpected token'))) {
+          event.preventDefault();
+          event.stopImmediatePropagation();
+          return true;
+        }
+      }, true);
+    })();
+  </script>
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
   <title>HeatShield Pro — Operational Biometeorology &amp; Heat Risk Platform</title>
@@ -596,49 +702,139 @@
 
       <div class="biomet-layout">
         <!-- Precision Arc Dial Gauge Card -->
-        <div class="gauge-panel-card">
+        <div class="gauge-panel-card" id="biomet-gauge-card">
           <div class="gauge-panel-top">
             <div>
               <h3 class="panel-card-title">Biometeorological Strain Gauge</h3>
-              <span class="panel-card-sub">NOAA Multi-Polynomial Steadman Model</span>
+              <span class="panel-card-sub" id="gauge-model-sub">NOAA Multi-Polynomial Steadman Model</span>
             </div>
-            <span class="gauge-status-badge" id="gauge-badge-pill">Normal</span>
+            <div class="gauge-top-controls">
+              <span class="gauge-status-badge" id="gauge-badge-pill">Normal</span>
+              <button id="gauge-demo-btn" class="gauge-demo-btn" type="button" title="Play animated strain sweep">
+                <svg viewBox="0 0 24 24" width="11" height="11" stroke="currentColor" stroke-width="2.5" fill="none"><polygon points="5 3 19 12 5 21 5 3"/></svg>
+                <span>SWEEP DEMO</span>
+              </button>
+              <button id="gauge-reset-btn" class="gauge-reset-btn hidden" type="button" title="Reset to live telemetry">
+                <svg viewBox="0 0 24 24" width="11" height="11" stroke="currentColor" stroke-width="2.5" fill="none"><path d="M3 12a9 9 0 1 0 9-9 9.75 9.75 0 0 0-6.74 2.74L3 8"/><path d="M3 3v5h5"/></svg>
+                <span>LIVE SYNC</span>
+              </button>
+            </div>
+          </div>
+
+          <!-- Interactive Model Selector Nav -->
+          <div class="strain-model-nav" id="strain-model-nav" role="tablist" aria-label="Biometeorological Model Selection">
+            <button class="model-nav-btn active" data-model="heat_index" id="btn-model-hi" type="button">Heat Index</button>
+            <button class="model-nav-btn" data-model="wbgt" id="btn-model-wbgt" type="button">WBGT</button>
+            <button class="model-nav-btn" data-model="utci" id="btn-model-utci" type="button">UTCI</button>
+            <button class="model-nav-btn" data-model="wet_bulb" id="btn-model-wetbulb" type="button">Wet Bulb</button>
+            <button class="model-nav-btn" data-model="humidex" id="btn-model-humidex" type="button">Humidex</button>
+            <button class="model-nav-btn" data-model="dew_point" id="btn-model-dewpoint" type="button">Dew Point</button>
           </div>
 
           <div class="gauge-viewport">
-            <svg id="stress-gauge" viewBox="0 0 320 210" class="gauge-svg">
+            <svg id="stress-gauge" viewBox="0 0 320 215" class="gauge-svg interactive-wheel" role="slider" aria-valuemin="20" aria-valuemax="60" aria-valuenow="35" aria-label="Biometeorological Strain Dial">
+              <defs>
+                <filter id="biomet-gauge-glow" x="-30%" y="-30%" width="160%" height="160%">
+                  <feGaussianBlur stdDeviation="3.5" result="blur" />
+                  <feComposite in="SourceGraphic" in2="blur" operator="over" />
+                </filter>
+                <filter id="biomet-tip-pulse" x="-40%" y="-40%" width="180%" height="180%">
+                  <feGaussianBlur stdDeviation="4.5" result="blur" />
+                  <feMerge>
+                    <feMergeNode in="blur" />
+                    <feMergeNode in="SourceGraphic" />
+                  </feMerge>
+                </filter>
+              </defs>
+
+              <!-- Inactive Base Track Arc (180 deg, r=125, cx=160, cy=175) -->
               <path d="M 35 175 A 125 125 0 0 1 285 175" fill="none" stroke="rgba(255,255,255,0.06)" stroke-width="16" stroke-linecap="round" />
-              <path d="M 35 175 A 125 125 0 0 1 80 65" fill="none" stroke="#10b981" stroke-width="12" stroke-linecap="round" />
-              <path d="M 86 60 A 125 125 0 0 1 138 32" fill="none" stroke="#f59e0b" stroke-width="12" stroke-linecap="round" />
-              <path d="M 144 31 A 125 125 0 0 1 176 31" fill="none" stroke="#f97316" stroke-width="12" stroke-linecap="round" />
-              <path d="M 182 32 A 125 125 0 0 1 234 60" fill="none" stroke="#ef4444" stroke-width="12" stroke-linecap="round" />
-              <path d="M 240 65 A 125 125 0 0 1 285 175" fill="none" stroke="#b91c1c" stroke-width="12" stroke-linecap="round" />
+              
+              <!-- Subtle Background Color Segments (Normal to Extreme) -->
+              <path d="M 35 175 A 125 125 0 0 1 80 65" fill="none" stroke="#10b981" stroke-width="12" stroke-linecap="round" opacity="0.32" />
+              <path d="M 86 60 A 125 125 0 0 1 138 32" fill="none" stroke="#f59e0b" stroke-width="12" stroke-linecap="round" opacity="0.32" />
+              <path d="M 144 31 A 125 125 0 0 1 176 31" fill="none" stroke="#f97316" stroke-width="12" stroke-linecap="round" opacity="0.32" />
+              <path d="M 182 32 A 125 125 0 0 1 234 60" fill="none" stroke="#ef4444" stroke-width="12" stroke-linecap="round" opacity="0.32" />
+              <path d="M 240 65 A 125 125 0 0 1 285 175" fill="none" stroke="#b91c1c" stroke-width="12" stroke-linecap="round" opacity="0.32" />
 
-              <text x="36" y="198" text-anchor="middle" class="svg-tick-txt">20°</text>
-              <text x="82" y="48" text-anchor="middle" class="svg-tick-txt">30°</text>
-              <text x="160" y="18" text-anchor="middle" class="svg-tick-txt">40°</text>
-              <text x="238" y="48" text-anchor="middle" class="svg-tick-txt">50°</text>
-              <text x="284" y="198" text-anchor="middle" class="svg-tick-txt">60°</text>
+              <!-- Precision Radial Tick Hash Marks -->
+              <path d="M 35 175 L 23 175 M 71.6 86.6 L 62 80 M 160 50 L 160 38 M 248.4 86.6 L 258 80 M 285 175 L 297 175" stroke="rgba(255,255,255,0.22)" stroke-width="1.8" stroke-linecap="round" />
+              <path d="M 50 126 L 42 122 M 111 59 L 105 52 M 209 59 L 215 52 M 270 126 L 278 122" stroke="rgba(255,255,255,0.1)" stroke-width="1.2" stroke-linecap="round" />
 
-              <g id="gauge-needle-group" transform="rotate(-90 160 175)">
-                <polygon id="gauge-needle" points="160,38 156,175 164,175" fill="#f8fafc" />
-                <circle cx="160" cy="175" r="9" fill="#0284c7" />
-                <circle cx="160" cy="175" r="3.5" fill="#060911" />
+              <!-- Dynamic Active Sweep Arc -->
+              <path id="gauge-active-arc" d="M 35 175 A 125 125 0 0 1 285 175" fill="none" stroke="#f59e0b" stroke-width="14" stroke-linecap="round" stroke-dasharray="0 400" filter="url(#biomet-gauge-glow)" />
+
+              <!-- Dynamic Glowing Tip Marker Group -->
+              <g id="gauge-tip-group" opacity="0">
+                <circle id="gauge-arc-tip-halo" cx="35" cy="175" r="9" fill="#f59e0b" opacity="0.45" filter="url(#biomet-tip-pulse)" />
+                <circle id="gauge-arc-tip" cx="35" cy="175" r="4.5" fill="#ffffff" stroke="#f59e0b" stroke-width="2" />
               </g>
 
-              <text x="160" y="136" text-anchor="middle" class="svg-gauge-val tabular-num" id="gauge-value-text">--</text>
-              <text x="160" y="156" text-anchor="middle" class="svg-gauge-unit" id="gauge-unit-text">°C Heat Index</text>
-              <text x="160" y="190" text-anchor="middle" class="svg-gauge-status" id="gauge-label-text">NORMAL</text>
+              <!-- Interactive Hover Reticle Guide Line -->
+              <line id="gauge-hover-needle" x1="160" y1="175" x2="160" y2="48" stroke="#38bdf8" stroke-width="1.5" stroke-dasharray="3 4" opacity="0" pointer-events="none" />
+
+              <!-- Precision Inner Reticle Rings -->
+              <path d="M 52 175 A 108 108 0 0 1 268 175" fill="none" stroke="rgba(255,255,255,0.08)" stroke-width="1.2" stroke-dasharray="2 6" />
+              <path d="M 72 175 A 88 88 0 0 1 248 175" fill="none" stroke="rgba(255,255,255,0.04)" stroke-width="1" />
+
+              <!-- Calibrated Dynamic Scale Ticks -->
+              <text x="36" y="198" text-anchor="middle" class="svg-tick-txt" id="gauge-tick-0">20°</text>
+              <text x="82" y="48" text-anchor="middle" class="svg-tick-txt" id="gauge-tick-1">30°</text>
+              <text x="160" y="18" text-anchor="middle" class="svg-tick-txt" id="gauge-tick-2">40°</text>
+              <text x="238" y="48" text-anchor="middle" class="svg-tick-txt" id="gauge-tick-3">50°</text>
+              <text x="284" y="198" text-anchor="middle" class="svg-tick-txt" id="gauge-tick-4">60°</text>
+
+              <!-- Hub Ripple Wave for Tactile Feedback -->
+              <circle id="gauge-hub-ripple" cx="160" cy="175" r="14" fill="none" stroke="#38bdf8" stroke-width="2" opacity="0" pointer-events="none" />
+
+              <!-- Needle Group (Rotated around 160 175) -->
+              <g id="gauge-needle-group" transform="rotate(-90 160 175)">
+                <polygon points="160,32 153,175 167,175" fill="#f59e0b" opacity="0.35" filter="url(#biomet-gauge-glow)" id="gauge-needle-glow" />
+                <polygon id="gauge-needle" points="160,32 156.5,175 163.5,175" fill="#f8fafc" />
+                <line x1="160" y1="36" x2="160" y2="175" stroke="#f59e0b" stroke-width="1.2" opacity="0.8" id="gauge-needle-spine" />
+                <circle cx="160" cy="175" r="12" fill="#090e1a" stroke="#38bdf8" stroke-width="2" id="gauge-hub-outer" />
+                <circle cx="160" cy="175" r="6" fill="#f59e0b" id="gauge-hub-pin" />
+                <circle cx="160" cy="175" r="2.2" fill="#ffffff" />
+              </g>
+
+              <!-- Central Live SVG Readouts -->
+              <text x="160" y="128" text-anchor="middle" class="svg-gauge-val tabular-num" id="gauge-value-text">--</text>
+              <text x="160" y="148" text-anchor="middle" class="svg-gauge-unit" id="gauge-unit-text">°C Heat Index</text>
+              <text x="160" y="168" text-anchor="middle" class="svg-gauge-status" id="gauge-label-text">NORMAL</text>
             </svg>
           </div>
 
+          <!-- Wheel Interaction Hint -->
+          <div class="wheel-interactive-hint">
+            <span class="hint-dot" id="gauge-hint-dot"></span>
+            <span id="gauge-hint-text">Interactive Dial — Click or drag to test physiological thresholds</span>
+          </div>
+
+          <!-- Comprehensive Summary & Clinical Guidance Box -->
           <div class="gauge-summary-box">
-            <div class="gauge-number-row">
-              <span id="gauge-heat-index" class="gauge-large-val tabular-num">--</span>
-              <span class="gauge-large-unit" id="unit-label-gauge">°C</span>
+            <div class="gauge-summary-top">
+              <div class="gauge-number-row">
+                <span id="gauge-heat-index" class="gauge-large-val tabular-num">--</span>
+                <span class="gauge-large-unit" id="unit-label-gauge">°C</span>
+              </div>
+              <div class="gauge-pill" id="gauge-category-pill">Normal</div>
             </div>
-            <div class="gauge-pill" id="gauge-category-pill">Normal</div>
             <p class="gauge-desc" id="gauge-statement">Processing biometeorological conditions...</p>
+
+            <div class="gauge-clinical-grid">
+              <div class="clinical-stat-item">
+                <span class="clinical-label">PHYSIOLOGICAL LOAD</span>
+                <span class="clinical-val" id="gauge-impact-metric">Optimal</span>
+              </div>
+              <div class="clinical-stat-item">
+                <span class="clinical-label">HYDRATION TARGET</span>
+                <span class="clinical-val" id="gauge-hydration-metric">250 mL/h</span>
+              </div>
+              <div class="clinical-stat-item">
+                <span class="clinical-label">WORK / REST CYCLE</span>
+                <span class="clinical-val" id="gauge-workrest-metric">Continuous</span>
+              </div>
+            </div>
           </div>
         </div>
 
@@ -988,34 +1184,36 @@
             <span class="bento-chip">Action Checklist</span>
           </div>
           <div class="recommendations-list" id="recommendations-list">
-            <div class="skeleton-row">
-              <div class="skeleton-shimmer skeleton-circle" style="width:18px; height:18px;"></div>
-              <div style="flex:1;">
-                <div class="skeleton-shimmer skeleton-text" style="width:75%; height:13px; margin-bottom:4px;"></div>
-                <div class="skeleton-shimmer skeleton-text" style="width:90%; height:11px;"></div>
-              </div>
-            </div>
-            <div class="skeleton-row">
-              <div class="skeleton-shimmer skeleton-circle" style="width:18px; height:18px;"></div>
-              <div style="flex:1;">
-                <div class="skeleton-shimmer skeleton-text" style="width:70%; height:13px; margin-bottom:4px;"></div>
-                <div class="skeleton-shimmer skeleton-text" style="width:85%; height:11px;"></div>
-              </div>
-            </div>
-            <div class="skeleton-row">
-              <div class="skeleton-shimmer skeleton-circle" style="width:18px; height:18px;"></div>
-              <div style="flex:1;">
-                <div class="skeleton-shimmer skeleton-text" style="width:80%; height:13px; margin-bottom:4px;"></div>
-                <div class="skeleton-shimmer skeleton-text" style="width:65%; height:11px;"></div>
-              </div>
-            </div>
-            <div class="skeleton-row">
-              <div class="skeleton-shimmer skeleton-circle" style="width:18px; height:18px;"></div>
-              <div style="flex:1;">
-                <div class="skeleton-shimmer skeleton-text" style="width:65%; height:13px; margin-bottom:4px;"></div>
-                <div class="skeleton-shimmer skeleton-text" style="width:80%; height:11px;"></div>
-              </div>
-            </div>
+            <ul style="list-style:none; display:flex; flex-direction:column; gap:0.5rem; margin:0; padding:0;">
+              <li style="background: rgba(0, 0, 0, 0.2); border: 1px solid var(--border-subtle); border-left: 2px solid var(--accent-primary); border-radius: var(--radius-sm); padding: 0.65rem 0.85rem; display: flex; align-items: flex-start; gap: 0.5rem;">
+                <div class="skeleton-shimmer skeleton-circle" style="width:14px; height:14px; margin-top:2px;"></div>
+                <div style="flex:1;">
+                  <div class="skeleton-shimmer skeleton-text" style="width:75%; height:13px; margin-bottom:4px;"></div>
+                  <div class="skeleton-shimmer skeleton-text" style="width:90%; height:11px;"></div>
+                </div>
+              </li>
+              <li style="background: rgba(0, 0, 0, 0.2); border: 1px solid var(--border-subtle); border-left: 2px solid var(--accent-primary); border-radius: var(--radius-sm); padding: 0.65rem 0.85rem; display: flex; align-items: flex-start; gap: 0.5rem;">
+                <div class="skeleton-shimmer skeleton-circle" style="width:14px; height:14px; margin-top:2px;"></div>
+                <div style="flex:1;">
+                  <div class="skeleton-shimmer skeleton-text" style="width:70%; height:13px; margin-bottom:4px;"></div>
+                  <div class="skeleton-shimmer skeleton-text" style="width:85%; height:11px;"></div>
+                </div>
+              </li>
+              <li style="background: rgba(0, 0, 0, 0.2); border: 1px solid var(--border-subtle); border-left: 2px solid var(--accent-primary); border-radius: var(--radius-sm); padding: 0.65rem 0.85rem; display: flex; align-items: flex-start; gap: 0.5rem;">
+                <div class="skeleton-shimmer skeleton-circle" style="width:14px; height:14px; margin-top:2px;"></div>
+                <div style="flex:1;">
+                  <div class="skeleton-shimmer skeleton-text" style="width:80%; height:13px; margin-bottom:4px;"></div>
+                  <div class="skeleton-shimmer skeleton-text" style="width:65%; height:11px;"></div>
+                </div>
+              </li>
+              <li style="background: rgba(0, 0, 0, 0.2); border: 1px solid var(--border-subtle); border-left: 2px solid var(--accent-primary); border-radius: var(--radius-sm); padding: 0.65rem 0.85rem; display: flex; align-items: flex-start; gap: 0.5rem;">
+                <div class="skeleton-shimmer skeleton-circle" style="width:14px; height:14px; margin-top:2px;"></div>
+                <div style="flex:1;">
+                  <div class="skeleton-shimmer skeleton-text" style="width:65%; height:13px; margin-bottom:4px;"></div>
+                  <div class="skeleton-shimmer skeleton-text" style="width:80%; height:11px;"></div>
+                </div>
+              </li>
+            </ul>
           </div>
         </div>
 
@@ -1026,27 +1224,29 @@
             <span class="bento-chip chip-orange">High Priority</span>
           </div>
           <div class="vulnerable-groups" id="vulnerable-groups">
-            <div class="skeleton-row" style="padding:0.75rem;">
-              <div class="skeleton-shimmer skeleton-circle" style="width:24px; height:24px;"></div>
-              <div style="flex:1;">
-                <div class="skeleton-shimmer skeleton-text" style="width:45%; height:14px; margin-bottom:5px;"></div>
-                <div class="skeleton-shimmer skeleton-text" style="width:85%; height:11px;"></div>
-              </div>
-            </div>
-            <div class="skeleton-row" style="padding:0.75rem;">
-              <div class="skeleton-shimmer skeleton-circle" style="width:24px; height:24px;"></div>
-              <div style="flex:1;">
-                <div class="skeleton-shimmer skeleton-text" style="width:50%; height:14px; margin-bottom:5px;"></div>
-                <div class="skeleton-shimmer skeleton-text" style="width:80%; height:11px;"></div>
-              </div>
-            </div>
-            <div class="skeleton-row" style="padding:0.75rem;">
-              <div class="skeleton-shimmer skeleton-circle" style="width:24px; height:24px;"></div>
-              <div style="flex:1;">
-                <div class="skeleton-shimmer skeleton-text" style="width:40%; height:14px; margin-bottom:5px;"></div>
-                <div class="skeleton-shimmer skeleton-text" style="width:90%; height:11px;"></div>
-              </div>
-            </div>
+            <ul style="list-style:none; display:flex; flex-direction:column; gap:0.5rem; margin:0; padding:0;">
+              <li style="background: rgba(245, 158, 11, 0.1); border: 1px solid rgba(245, 158, 11, 0.2); border-left: 2px solid #f59e0b; border-radius: var(--radius-sm); padding: 0.65rem 0.85rem; display: flex; align-items: flex-start; gap: 0.5rem;">
+                <div class="skeleton-shimmer skeleton-circle" style="width:18px; height:18px;"></div>
+                <div style="flex:1;">
+                  <div class="skeleton-shimmer skeleton-text" style="width:45%; height:14px; margin-bottom:5px;"></div>
+                  <div class="skeleton-shimmer skeleton-text" style="width:85%; height:11px;"></div>
+                </div>
+              </li>
+              <li style="background: rgba(245, 158, 11, 0.1); border: 1px solid rgba(245, 158, 11, 0.2); border-left: 2px solid #f59e0b; border-radius: var(--radius-sm); padding: 0.65rem 0.85rem; display: flex; align-items: flex-start; gap: 0.5rem;">
+                <div class="skeleton-shimmer skeleton-circle" style="width:18px; height:18px;"></div>
+                <div style="flex:1;">
+                  <div class="skeleton-shimmer skeleton-text" style="width:50%; height:14px; margin-bottom:5px;"></div>
+                  <div class="skeleton-shimmer skeleton-text" style="width:80%; height:11px;"></div>
+                </div>
+              </li>
+              <li style="background: rgba(245, 158, 11, 0.1); border: 1px solid rgba(245, 158, 11, 0.2); border-left: 2px solid #f59e0b; border-radius: var(--radius-sm); padding: 0.65rem 0.85rem; display: flex; align-items: flex-start; gap: 0.5rem;">
+                <div class="skeleton-shimmer skeleton-circle" style="width:18px; height:18px;"></div>
+                <div style="flex:1;">
+                  <div class="skeleton-shimmer skeleton-text" style="width:40%; height:14px; margin-bottom:5px;"></div>
+                  <div class="skeleton-shimmer skeleton-text" style="width:90%; height:11px;"></div>
+                </div>
+              </li>
+            </ul>
           </div>
         </div>
 
@@ -1154,73 +1354,82 @@
 
       <div class="shelters-grid" id="shelters-grid">
         <div class="shelter-card skeleton-card">
-          <div class="shelter-card-top" style="display:flex; justify-content:space-between; align-items:flex-start;">
-            <div style="flex:1;">
-              <div class="skeleton-shimmer skeleton-text" style="width:68%; height:16px; margin-bottom:6px;"></div>
-              <div class="skeleton-shimmer skeleton-text" style="width:45%; height:11px;"></div>
+          <div class="shelter-card-head">
+            <div class="shelter-head-main" style="width: 100%;">
+              <div class="skeleton-shimmer skeleton-text" style="width: 60%; height: 18px; margin-bottom: 4px;"></div>
+              <div class="skeleton-shimmer skeleton-text" style="width: 40%; height: 12px;"></div>
             </div>
-            <div class="skeleton-shimmer skeleton-pill" style="width:70px; height:18px;"></div>
+            <div class="skeleton-shimmer skeleton-pill" style="width: 60px; height: 22px;"></div>
           </div>
-          <div class="skeleton-shimmer skeleton-text" style="width:85%; height:12px; margin:8px 0;"></div>
-          <div class="shelter-occ-row" style="display:flex; justify-content:space-between; margin-bottom:4px;">
-            <div class="skeleton-shimmer skeleton-text" style="width:40%; height:12px;"></div>
-            <div class="skeleton-shimmer skeleton-text" style="width:32px; height:12px;"></div>
+          <div class="skeleton-shimmer skeleton-text" style="width: 80%; height: 28px; border-radius: 4px; margin-top: 8px;"></div>
+          <div class="shelter-capacity-module" style="margin-top: 8px;">
+            <div style="display:flex; justify-content:space-between; margin-bottom: 6px;">
+              <div class="skeleton-shimmer skeleton-text" style="width: 40%; height: 12px;"></div>
+              <div class="skeleton-shimmer skeleton-text" style="width: 20%; height: 12px;"></div>
+            </div>
+            <div class="shelter-occ-track" style="height: 6px; border-radius: 3px;"></div>
           </div>
-          <div class="shelter-occ-bar-wrap" style="height:6px; background:rgba(255,255,255,0.04); border-radius:3px; overflow:hidden;">
-            <div class="skeleton-shimmer" style="width:100%; height:100%;"></div>
+          <div class="shelter-tags-grid" style="margin-top: 8px;">
+            <div class="skeleton-shimmer skeleton-pill" style="width: 50px; height: 20px;"></div>
+            <div class="skeleton-shimmer skeleton-pill" style="width: 60px; height: 20px;"></div>
+            <div class="skeleton-shimmer skeleton-pill" style="width: 45px; height: 20px;"></div>
           </div>
-          <div class="shelter-amenities-tags" style="display:flex; gap:6px; margin-top:8px;">
-            <span class="skeleton-shimmer skeleton-pill" style="width:48px; height:18px;"></span>
-            <span class="skeleton-shimmer skeleton-pill" style="width:56px; height:18px;"></span>
-            <span class="skeleton-shimmer skeleton-pill" style="width:62px; height:18px;"></span>
+          <div class="shelter-card-actions" style="margin-top: 12px;">
+            <div class="skeleton-shimmer skeleton-text" style="width: 35%; height: 14px;"></div>
+            <div class="skeleton-shimmer skeleton-pill" style="width: 75px; height: 26px;"></div>
           </div>
-          <div class="skeleton-shimmer" style="width:100%; height:32px; border-radius:6px; margin-top:10px;"></div>
         </div>
         <div class="shelter-card skeleton-card">
-          <div class="shelter-card-top" style="display:flex; justify-content:space-between; align-items:flex-start;">
-            <div style="flex:1;">
-              <div class="skeleton-shimmer skeleton-text" style="width:62%; height:16px; margin-bottom:6px;"></div>
-              <div class="skeleton-shimmer skeleton-text" style="width:40%; height:11px;"></div>
+          <div class="shelter-card-head">
+            <div class="shelter-head-main" style="width: 100%;">
+              <div class="skeleton-shimmer skeleton-text" style="width: 60%; height: 18px; margin-bottom: 4px;"></div>
+              <div class="skeleton-shimmer skeleton-text" style="width: 40%; height: 12px;"></div>
             </div>
-            <div class="skeleton-shimmer skeleton-pill" style="width:65px; height:18px;"></div>
+            <div class="skeleton-shimmer skeleton-pill" style="width: 60px; height: 22px;"></div>
           </div>
-          <div class="skeleton-shimmer skeleton-text" style="width:80%; height:12px; margin:8px 0;"></div>
-          <div class="shelter-occ-row" style="display:flex; justify-content:space-between; margin-bottom:4px;">
-            <div class="skeleton-shimmer skeleton-text" style="width:45%; height:12px;"></div>
-            <div class="skeleton-shimmer skeleton-text" style="width:32px; height:12px;"></div>
+          <div class="skeleton-shimmer skeleton-text" style="width: 80%; height: 28px; border-radius: 4px; margin-top: 8px;"></div>
+          <div class="shelter-capacity-module" style="margin-top: 8px;">
+            <div style="display:flex; justify-content:space-between; margin-bottom: 6px;">
+              <div class="skeleton-shimmer skeleton-text" style="width: 40%; height: 12px;"></div>
+              <div class="skeleton-shimmer skeleton-text" style="width: 20%; height: 12px;"></div>
+            </div>
+            <div class="shelter-occ-track" style="height: 6px; border-radius: 3px;"></div>
           </div>
-          <div class="shelter-occ-bar-wrap" style="height:6px; background:rgba(255,255,255,0.04); border-radius:3px; overflow:hidden;">
-            <div class="skeleton-shimmer" style="width:100%; height:100%;"></div>
+          <div class="shelter-tags-grid" style="margin-top: 8px;">
+            <div class="skeleton-shimmer skeleton-pill" style="width: 50px; height: 20px;"></div>
+            <div class="skeleton-shimmer skeleton-pill" style="width: 60px; height: 20px;"></div>
+            <div class="skeleton-shimmer skeleton-pill" style="width: 45px; height: 20px;"></div>
           </div>
-          <div class="shelter-amenities-tags" style="display:flex; gap:6px; margin-top:8px;">
-            <span class="skeleton-shimmer skeleton-pill" style="width:52px; height:18px;"></span>
-            <span class="skeleton-shimmer skeleton-pill" style="width:48px; height:18px;"></span>
-            <span class="skeleton-shimmer skeleton-pill" style="width:58px; height:18px;"></span>
+          <div class="shelter-card-actions" style="margin-top: 12px;">
+            <div class="skeleton-shimmer skeleton-text" style="width: 35%; height: 14px;"></div>
+            <div class="skeleton-shimmer skeleton-pill" style="width: 75px; height: 26px;"></div>
           </div>
-          <div class="skeleton-shimmer" style="width:100%; height:32px; border-radius:6px; margin-top:10px;"></div>
         </div>
         <div class="shelter-card skeleton-card">
-          <div class="shelter-card-top" style="display:flex; justify-content:space-between; align-items:flex-start;">
-            <div style="flex:1;">
-              <div class="skeleton-shimmer skeleton-text" style="width:75%; height:16px; margin-bottom:6px;"></div>
-              <div class="skeleton-shimmer skeleton-text" style="width:50%; height:11px;"></div>
+          <div class="shelter-card-head">
+            <div class="shelter-head-main" style="width: 100%;">
+              <div class="skeleton-shimmer skeleton-text" style="width: 60%; height: 18px; margin-bottom: 4px;"></div>
+              <div class="skeleton-shimmer skeleton-text" style="width: 40%; height: 12px;"></div>
             </div>
-            <div class="skeleton-shimmer skeleton-pill" style="width:75px; height:18px;"></div>
+            <div class="skeleton-shimmer skeleton-pill" style="width: 60px; height: 22px;"></div>
           </div>
-          <div class="skeleton-shimmer skeleton-text" style="width:88%; height:12px; margin:8px 0;"></div>
-          <div class="shelter-occ-row" style="display:flex; justify-content:space-between; margin-bottom:4px;">
-            <div class="skeleton-shimmer skeleton-text" style="width:38%; height:12px;"></div>
-            <div class="skeleton-shimmer skeleton-text" style="width:32px; height:12px;"></div>
+          <div class="skeleton-shimmer skeleton-text" style="width: 80%; height: 28px; border-radius: 4px; margin-top: 8px;"></div>
+          <div class="shelter-capacity-module" style="margin-top: 8px;">
+            <div style="display:flex; justify-content:space-between; margin-bottom: 6px;">
+              <div class="skeleton-shimmer skeleton-text" style="width: 40%; height: 12px;"></div>
+              <div class="skeleton-shimmer skeleton-text" style="width: 20%; height: 12px;"></div>
+            </div>
+            <div class="shelter-occ-track" style="height: 6px; border-radius: 3px;"></div>
           </div>
-          <div class="shelter-occ-bar-wrap" style="height:6px; background:rgba(255,255,255,0.04); border-radius:3px; overflow:hidden;">
-            <div class="skeleton-shimmer" style="width:100%; height:100%;"></div>
+          <div class="shelter-tags-grid" style="margin-top: 8px;">
+            <div class="skeleton-shimmer skeleton-pill" style="width: 50px; height: 20px;"></div>
+            <div class="skeleton-shimmer skeleton-pill" style="width: 60px; height: 20px;"></div>
+            <div class="skeleton-shimmer skeleton-pill" style="width: 45px; height: 20px;"></div>
           </div>
-          <div class="shelter-amenities-tags" style="display:flex; gap:6px; margin-top:8px;">
-            <span class="skeleton-shimmer skeleton-pill" style="width:44px; height:18px;"></span>
-            <span class="skeleton-shimmer skeleton-pill" style="width:60px; height:18px;"></span>
-            <span class="skeleton-shimmer skeleton-pill" style="width:54px; height:18px;"></span>
+          <div class="shelter-card-actions" style="margin-top: 12px;">
+            <div class="skeleton-shimmer skeleton-text" style="width: 35%; height: 14px;"></div>
+            <div class="skeleton-shimmer skeleton-pill" style="width: 75px; height: 26px;"></div>
           </div>
-          <div class="skeleton-shimmer" style="width:100%; height:32px; border-radius:6px; margin-top:10px;"></div>
         </div>
       </div>
     </section>

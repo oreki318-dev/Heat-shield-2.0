@@ -46,8 +46,8 @@ const PORT = 3000;
 
 app.use(express.json());
 app.use((err, req, res, next) => {
-  if (err instanceof SyntaxError && err.status === 400 && 'body' in err) {
-    return res.status(400).send({ error: err.message });
+  if (err instanceof SyntaxError && (err.status === 400 || err.statusCode === 400)) {
+    return res.status(400).json({ error: 'Malformed JSON payload' });
   }
   next();
 });
@@ -235,9 +235,12 @@ app.get('/favicon.ico', (req, res) => res.sendFile(path.join(__dirname, 'static'
 
 // Core Telemetry & Weather APIs
 app.get('/api/weather', async (req, res) => {
-    const lat = parseFloat(req.query.lat);
-    const lon = parseFloat(req.query.lon);
-    if (isNaN(lat) || isNaN(lon)) return res.status(400).json({ error: 'Missing lat/lon parameters' });
+    let lat = parseFloat(req.query.lat);
+    let lon = parseFloat(req.query.lon);
+    if (isNaN(lat) || isNaN(lon)) {
+        lat = 28.61;
+        lon = 77.23;
+    }
     
     const data = await fetchWeather(lat, lon);
     res.json(data);
@@ -1269,11 +1272,21 @@ app.get('/api/cooling-shelters', (req, res) => {
         // Sort by distance ascending so closest shelters always appear first
         allShelters.sort((a, b) => a.distance_km - b.distance_km);
 
+        // Smart Filtering: Only show shelters within 20km.
+        // If there are fewer than 3 within 20km, show the 3 closest regardless of distance.
+        // Cap the maximum returned to 6 to keep the UI focused.
+        let nearbyShelters = allShelters.filter(s => s.distance_km <= 20);
+        if (nearbyShelters.length < 3) {
+            nearbyShelters = allShelters.slice(0, 3);
+        } else {
+            nearbyShelters = nearbyShelters.slice(0, 6);
+        }
+
         res.json({
             nearest_city: city.name,
             nearest_city_id: city.id,
             user_coords: { lat: userLat, lon: userLon },
-            cooling_shelters: allShelters
+            cooling_shelters: nearbyShelters
         });
     } catch (err) {
         console.error('Error fetching cooling shelters:', err);

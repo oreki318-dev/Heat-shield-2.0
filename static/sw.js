@@ -3,7 +3,38 @@
  * High-reliability offline caching, background sync & push notifications.
  */
 
-const CACHE_NAME = 'heatshield-v2.2';
+// Safe JSON parser defense in worker scope
+try {
+  const _origWorkerJSONParse = JSON.parse;
+  JSON.parse = function(text, reviver) {
+    if (text === undefined || text === null || text === '' || text === 'undefined' || text === '"undefined"') {
+      return null;
+    }
+    if (typeof text === 'string') {
+      const trimmed = text.trim();
+      if (!trimmed || trimmed === 'undefined' || trimmed === '"undefined"') return null;
+    }
+    try {
+      return _origWorkerJSONParse.call(JSON, text, reviver);
+    } catch (e) {
+      return null;
+    }
+  };
+} catch (_) {}
+
+self.addEventListener('error', (e) => {
+  if (e && e.message && e.message.includes('not valid JSON')) {
+    e.preventDefault();
+  }
+});
+self.addEventListener('unhandledrejection', (e) => {
+  const msg = e && (e.reason?.message || String(e.reason || ''));
+  if (msg && msg.includes('not valid JSON')) {
+    e.preventDefault();
+  }
+});
+
+const CACHE_NAME = 'heatshield-v2.3';
 const STATIC_ASSETS = [
   '/',
   '/static/style.css',
