@@ -1458,6 +1458,10 @@ app.post('/api/auth/logout', (req, res) => {
 });
 
 // Launch Express Dev Server
-app.listen(PORT, '0.0.0.0', () => {
-    console.log(`HeatShield Pro server active on http://0.0.0.0:${PORT}`);
-});
+export default app;
+
+if (!process.env.VERCEL) {
+    app.listen(PORT, '0.0.0.0', () => {
+        console.log(`HeatShield Pro server active on http://0.0.0.0:${PORT}`);
+    });
+}
