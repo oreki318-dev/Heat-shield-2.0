@@ -222,6 +222,24 @@
               <button id="unit-f" class="unit-btn" data-unit="F">°F</button>
             </div>
 
+            <!-- Theme Toggle -->
+            <button id="btn-theme-toggle" class="toolbar-btn" title="Toggle Light/Dark Mode">
+              <svg id="theme-icon-dark" viewBox="0 0 24 24" width="14" height="14" stroke="currentColor" stroke-width="1.8" fill="none" style="display:none;">
+                <path d="M21 12.79A9 9 0 1 1 11.21 3 7 7 0 0 0 21 12.79z"/>
+              </svg>
+              <svg id="theme-icon-light" viewBox="0 0 24 24" width="14" height="14" stroke="currentColor" stroke-width="1.8" fill="none">
+                <circle cx="12" cy="12" r="5"/>
+                <line x1="12" y1="1" x2="12" y2="3"/>
+                <line x1="12" y1="21" x2="12" y2="23"/>
+                <line x1="4.22" y1="4.22" x2="5.64" y2="5.64"/>
+                <line x1="18.36" y1="18.36" x2="19.78" y2="19.78"/>
+                <line x1="1" y1="12" x2="3" y2="12"/>
+                <line x1="21" y1="12" x2="23" y2="12"/>
+                <line x1="4.22" y1="19.78" x2="5.64" y2="18.36"/>
+                <line x1="18.36" y1="5.64" x2="19.78" y2="4.22"/>
+              </svg>
+            </button>
+
             <!-- Push Notifications Alert Bell -->
             <button id="btn-notify-bell" class="toolbar-btn notify-bell-btn" title="Heatwave Early Warning Subscriptions">
               <svg viewBox="0 0 24 24" width="15" height="15" stroke="currentColor" stroke-width="1.8" fill="none">
@@ -997,14 +1015,24 @@
       </div>
 
       <div class="chart-panel bento-card">
-        <div class="chart-panel-header">
+        <div class="chart-panel-header" style="display: flex; align-items: center; justify-content: space-between; flex-wrap: wrap; gap: 12px;">
           <div class="chart-legend-wrap">
             <span class="c-legend"><span class="c-dot dot-temp"></span> Temperature</span>
             <span class="c-legend"><span class="c-dot dot-hi"></span> Heat Index</span>
             <span class="c-legend"><span class="c-dot dot-wbgt"></span> WBGT</span>
             <span class="c-legend"><span class="c-dot dot-tw"></span> Wet-Bulb</span>
           </div>
-          <span class="chart-danger-tag" id="danger-zone-legend">Shaded Area: Danger Zone (&gt;40°C)</span>
+          <div style="display: flex; align-items: center; gap: 12px;">
+            <span class="chart-danger-tag" id="danger-zone-legend">Shaded Area: Danger Zone (&gt;40°C)</span>
+            <button id="btn-download-chart" class="btn-action-small" title="Save Graph as Image" aria-label="Save Graph as Image">
+              <svg viewBox="0 0 24 24" width="16" height="16" stroke="currentColor" stroke-width="2" fill="none" style="margin-right: 6px;">
+                <path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/>
+                <polyline points="7 10 12 15 17 10"/>
+                <line x1="12" y1="15" x2="12" y2="3"/>
+              </svg>
+              Export PNG
+            </button>
+          </div>
         </div>
         <div class="chart-canvas-wrap">
           <canvas id="hourly-chart"></canvas>

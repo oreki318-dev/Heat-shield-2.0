@@ -63,6 +63,7 @@ let userMarker = null;
 document.addEventListener('DOMContentLoaded', initApp);
 
 async function initApp() {
+  initTheme();
   startUtcClock();
   setupEventListeners();
   initSidebarAndRouter();
@@ -105,6 +106,48 @@ function startAutoRefresh() {
   setInterval(() => {
     loadAllDashboardData();
   }, 300000); // 5 minutes
+}
+
+// ========== THEME TOGGLE ==========
+function initTheme() {
+  const btn = document.getElementById('btn-theme-toggle');
+  const iconDark = document.getElementById('theme-icon-dark');
+  const iconLight = document.getElementById('theme-icon-light');
+
+  function applyTheme(theme) {
+    if (theme === 'light') {
+      document.body.setAttribute('data-theme', 'light');
+      if (iconDark) iconDark.style.display = 'block';
+      if (iconLight) iconLight.style.display = 'none';
+    } else {
+      document.body.removeAttribute('data-theme');
+      if (iconDark) iconDark.style.display = 'none';
+      if (iconLight) iconLight.style.display = 'block';
+    }
+    // Re-render charts to update grid colors
+    if (typeof updateHourlyTimelineChart === 'function' && state.hourlyData) {
+      updateHourlyTimelineChart(state.hourlyData);
+    }
+    if (typeof renderEpidemiology === 'function' && state.epiData) {
+      // Re-rendering entire epi section to redraw the chart safely
+      renderEpidemiology(state.epiData);
+    }
+    if (typeof updateMapTheme === 'function') {
+      updateMapTheme(theme);
+    }
+  }
+
+  const savedTheme = localStorage.getItem('heatshield_theme') || 'dark';
+  applyTheme(savedTheme);
+
+  if (btn) {
+    btn.addEventListener('click', () => {
+      const current = document.body.getAttribute('data-theme');
+      const newTheme = current === 'light' ? 'dark' : 'light';
+      localStorage.setItem('heatshield_theme', newTheme);
+      applyTheme(newTheme);
+    });
+  }
 }
 
 // ========== LIVE CLOCK ==========
@@ -187,6 +230,35 @@ function setupEventListeners() {
         btn.classList.add('active');
         state.chartSeries = btn.dataset.series;
         if (state.hourlyData) updateHourlyTimelineChart(state.hourlyData);
+      }
+    });
+  }
+
+  // Download Chart Button
+  const btnDownloadChart = document.getElementById('btn-download-chart');
+  if (btnDownloadChart) {
+    btnDownloadChart.addEventListener('click', () => {
+      const canvas = document.getElementById('hourly-chart');
+      if (canvas) {
+        // Create temporary canvas to add background color
+        const tempCanvas = document.createElement('canvas');
+        tempCanvas.width = canvas.width;
+        tempCanvas.height = canvas.height;
+        const ctx = tempCanvas.getContext('2d');
+        
+        // Fill background to match app dark mode or light mode
+        const isLight = document.body.getAttribute('data-theme') === 'light';
+        ctx.fillStyle = isLight ? '#ffffff' : '#060911'; 
+        ctx.fillRect(0, 0, tempCanvas.width, tempCanvas.height);
+        
+        // Draw the original chart over the background
+        ctx.drawImage(canvas, 0, 0);
+        
+        const link = document.createElement('a');
+        link.download = `heatshield-forecast-${new Date().toISOString().slice(0, 10)}.png`;
+        link.href = tempCanvas.toDataURL('image/png', 1.0);
+        link.click();
+        showToast('Chart exported as PNG', 'success');
       }
     });
   }
@@ -1426,6 +1498,14 @@ function updateHourlyTimelineChart(hourlyData) {
     activeDatasets = allDatasets.filter(ds => ds.id === state.chartSeries || ds.id === 'temp');
   }
 
+  const isLight = document.body.getAttribute('data-theme') === 'light';
+  const gridColor = isLight ? 'rgba(0, 0, 0, 0.06)' : 'rgba(255, 255, 255, 0.04)';
+  const tickColor = isLight ? '#64748b' : '#64748b'; // Can stay same or use '#94a3b8'
+  const tooltipBg = isLight ? 'rgba(255, 255, 255, 0.95)' : 'rgba(8, 16, 26, 0.95)';
+  const tooltipTitle = isLight ? '#0f172a' : '#ffffff';
+  const tooltipBody = isLight ? '#475569' : '#94a3b8';
+  const tooltipBorder = isLight ? 'rgba(0, 0, 0, 0.1)' : 'rgba(255, 255, 255, 0.1)';
+
   hourlyChart = new Chart(ctx.getContext('2d'), {
     type: 'line',
     data: {
@@ -1442,12 +1522,12 @@ function updateHourlyTimelineChart(hourlyData) {
       plugins: {
         legend: { display: false },
         tooltip: {
-          backgroundColor: 'rgba(8, 16, 26, 0.95)',
-          titleColor: '#ffffff',
+          backgroundColor: tooltipBg,
+          titleColor: tooltipTitle,
           titleFont: { family: 'Outfit', size: 14, weight: '700' },
-          bodyColor: '#94a3b8',
+          bodyColor: tooltipBody,
           bodyFont: { family: 'Inter', size: 12 },
-          borderColor: 'rgba(0, 210, 255, 0.35)',
+          borderColor: tooltipBorder,
           borderWidth: 1,
           padding: 14,
           cornerRadius: 12,
@@ -1460,20 +1540,20 @@ function updateHourlyTimelineChart(hourlyData) {
       scales: {
         x: {
           ticks: {
-            color: '#64748b',
+            color: tickColor,
             maxTicksLimit: state.chartRange === 24 ? 8 : 12,
             maxRotation: 0,
             font: { size: 11, family: 'Inter' }
           },
-          grid: { color: 'rgba(255, 255, 255, 0.04)' }
+          grid: { color: gridColor }
         },
         y: {
           ticks: {
-            color: '#64748b',
+            color: tickColor,
             callback: (v) => `${v}°`,
             font: { size: 11, family: 'Inter' }
           },
-          grid: { color: 'rgba(255, 255, 255, 0.05)' }
+          grid: { color: gridColor }
         }
       }
     }
@@ -1806,6 +1886,7 @@ function updateMap(cityList) {
   if (!heatMap || !cityMarkersLayer || !Array.isArray(cityList)) return;
 
   cityMarkersLayer.clearLayers();
+  const isLight = document.body.getAttribute('data-theme') === 'light';
 
   cityList.forEach(city => {
     const size = Math.max(10, Math.min(26, (city.heat_index - 15) * 0.9));
@@ -1814,7 +1895,7 @@ function updateMap(cityList) {
     const circle = L.circleMarker([city.lat, city.lon], {
       radius: size,
       fillColor: riskColor,
-      color: '#ffffff',
+      color: isLight ? '#0f172a' : '#ffffff',
       weight: 1.5,
       opacity: 0.95,
       fillOpacity: 0.8
@@ -2314,6 +2395,7 @@ function showToast(msg, type = 'info') {
 
 let epiSurgeChart = null;
 let wardGisMap = null;
+let wardTileLayer = null;
 let wardGeojsonLayer = null;
 let currentWardLayerType = 'heat'; // 'heat', 'hvi', 'hospital'
 let currentWardData = null;
@@ -2357,6 +2439,7 @@ async function loadAllDashboardData(showToastAlert = false) {
     if (alertRes) state.alertData = alertRes;
     if (hourlyRes) state.hourlyData = hourlyRes;
     if (multiCityRes) state.multiCityData = multiCityRes;
+    if (epiRes) state.epiData = epiRes;
 
     const locNameEl = document.getElementById('location-name');
     const updateTimeEl = document.getElementById('update-time');
@@ -2495,6 +2578,12 @@ function renderEpiSurgeChart(forecast) {
     epiSurgeChart.destroy();
   }
 
+  const isLight = document.body.getAttribute('data-theme') === 'light';
+  const gridColor = isLight ? 'rgba(0,0,0,0.06)' : 'rgba(255,255,255,0.05)';
+  const tickColor = isLight ? '#64748b' : '#94a3b8';
+  const tooltipBg = isLight ? 'rgba(255, 255, 255, 0.95)' : 'rgba(10, 18, 30, 0.95)';
+  const tooltipBorder = isLight ? 'rgba(0,0,0,0.15)' : 'rgba(255,255,255,0.15)';
+
   epiSurgeChart = new Chart(ctx, {
     type: 'bar',
     data: {
@@ -2524,10 +2613,12 @@ function renderEpiSurgeChart(forecast) {
       plugins: {
         legend: { display: false },
         tooltip: {
-          backgroundColor: 'rgba(10, 18, 30, 0.95)',
+          backgroundColor: tooltipBg,
           titleFont: { family: 'Outfit', size: 13 },
           bodyFont: { family: 'JetBrains Mono', size: 12 },
-          borderColor: 'rgba(255,255,255,0.15)',
+          titleColor: isLight ? '#0f172a' : '#ffffff',
+          bodyColor: isLight ? '#475569' : '#fff',
+          borderColor: tooltipBorder,
           borderWidth: 1,
           padding: 10,
           callbacks: {
@@ -2537,13 +2628,13 @@ function renderEpiSurgeChart(forecast) {
       },
       scales: {
         x: {
-          grid: { color: 'rgba(255,255,255,0.05)' },
-          ticks: { color: '#94a3b8', font: { family: 'Outfit', size: 11 } }
+          grid: { color: gridColor },
+          ticks: { color: tickColor, font: { family: 'Outfit', size: 11 } }
         },
         y: {
-          grid: { color: 'rgba(255,255,255,0.05)' },
+          grid: { color: gridColor },
           ticks: {
-            color: '#94a3b8',
+            color: tickColor,
             font: { family: 'JetBrains Mono', size: 11 },
             callback: (v) => `+${v}%`
           },
@@ -2567,7 +2658,12 @@ function initWardMap() {
     attributionControl: false
   }).setView([28.64, 77.21], 10);
 
-  L.tileLayer('https://{s}.basemaps.cartocdn.com/dark_all/{z}/{x}/{y}{r}.png', {
+  const isLight = document.body.getAttribute('data-theme') === 'light';
+  const tileUrl = isLight 
+    ? 'https://{s}.basemaps.cartocdn.com/light_all/{z}/{x}/{y}{r}.png'
+    : 'https://{s}.basemaps.cartocdn.com/dark_all/{z}/{x}/{y}{r}.png';
+
+  wardTileLayer = L.tileLayer(tileUrl, {
     maxZoom: 16,
     subdomains: 'abcd'
   }).addTo(wardGisMap);
@@ -2581,6 +2677,15 @@ function initWardMap() {
       updateWardChloroplethStyle();
     });
   });
+}
+
+function updateMapTheme(theme) {
+  if (wardGisMap && wardTileLayer) {
+    const tileUrl = theme === 'light' 
+      ? 'https://{s}.basemaps.cartocdn.com/light_all/{z}/{x}/{y}{r}.png'
+      : 'https://{s}.basemaps.cartocdn.com/dark_all/{z}/{x}/{y}{r}.png';
+    wardTileLayer.setUrl(tileUrl);
+  }
 }
 
 function renderWardGisMap(geojson, summaryList) {
@@ -2677,7 +2782,8 @@ function onEachWardFeature(feature, layer) {
   layer.on({
     mouseover: (e) => {
       const l = e.target;
-      l.setStyle({ weight: 3, fillOpacity: 0.8, color: '#ffffff' });
+      const isLight = document.body.getAttribute('data-theme') === 'light';
+      l.setStyle({ weight: 3, fillOpacity: 0.8, color: isLight ? '#0f172a' : '#ffffff' });
       l.bringToFront();
     },
     mouseout: (e) => {
